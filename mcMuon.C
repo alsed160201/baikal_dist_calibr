@@ -66,7 +66,7 @@ void mcMuon(std::string _filelist,
   char stit[120];
   snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
 
-  TFile* outputFile = new TFile("outputFile.root","recreate");
+  TFile* outputFile = new TFile("./output/outputFile.root","recreate");
 
   TH1F* hNmuon = new TH1F("hNmuon","Number of muons in event",_nmuonnbin,_nmuonmin,_nmuonmax);
   TH1F* htruetime = new TH1F("htruetime","MC time of first muon",_timenbin,_timemin,_timemax);
@@ -171,12 +171,6 @@ void mcMuon(std::string _filelist,
 
       //reference point at the muon track and its time:
       TVector3 refPoint = breco->GetXYZRec();
-      /*
-float refpoint_time = breco->GetTimeXYZRec();
-float propagation_time = BARS::Muon::PropagationTime(breco->GetXYZRec(), breco->GetDirectionRec(), bgeomtel->GetPosition(channelID));
-float pulse_time = bevt->GetImpulse(i)->GetTime();
-float window = abs(refpoint_time + propagation_time - pulse_time);
-       */
      
       //loop over bevent pulses (fired OM's)
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
@@ -224,6 +218,8 @@ float window = abs(refpoint_time + propagation_time - pulse_time);
   std::cout << minDtime << " < time dif < " << maxDtime << " ns" << std::endl;
   std::cout << "Max distance to reco track: " << maxDist << " m" << std::endl;
  
+
+
   //------------- plot to canvas
   if ( gROOT->GetListOfCanvases()->FindObject("cnmuon") == NULL )
     cnmuon = new TCanvas("cnmuon","N muons", 10, 10, 400, 400);
@@ -281,16 +277,6 @@ float window = abs(refpoint_time + propagation_time - pulse_time);
   hdt->GetYaxis()->SetTitle("entries");
   hdt->DrawCopy();
 
-  /*  
-  if ( gROOT->GetListOfCanvases()->FindObject("cpa") == NULL )
-    cpa = new TCanvas("cpa","Reco Theta", 310, 310, 600, 400);
-  cpa->cd();
-  snprintf(stmp,sizeof stmp,"%s, Nevt = %d",stit,htheta->GetEntries());  
-  htheta->SetTitle(stmp);
-  htheta->GetXaxis()->SetTitle("Polar angle of reco track");
-  htheta->GetYaxis()->SetTitle("entries");
-  htheta->DrawCopy();
-  */
 
   if ( gROOT->GetListOfCanvases()->FindObject("c2cd") == NULL )
     c2cd = new TCanvas("c2cd","LY vs Dist", 1010, 10, 600, 400);
@@ -335,17 +321,6 @@ float window = abs(refpoint_time + propagation_time - pulse_time);
   hLYvsTrackDistTD->DrawCopy("colz");
 
 
-  /*
-  if ( gROOT->GetListOfCanvases()->FindObject("c2cds") == NULL )
-    c2cds = new TCanvas("c2cds","cut LY vs Dist", 910, 310, 600, 400);
-  c2cds->cd();
-  snprintf(stmp,sizeof stmp,"%s, Nevt = %d",stit,hLYvsTrackDistSel->GetEntries());  
-  hLYvsTrackDistSel->GetXaxis()->SetTitle("Distance from muon track to OM [m]");
-  hLYvsTrackDistSel->GetYaxis()->SetTitle("LY [p.e.]");
-  hLYvsTrackDistSel->DrawCopy("colz");
-  */
-
-  //---- write to output root-file
   outputFile->cd();
   hNmuon->Write();
   htruetime->Write();
@@ -359,75 +334,7 @@ float window = abs(refpoint_time + propagation_time - pulse_time);
   hLYvsTrackDistPA->Write();
   hLYvsTrackDistTD->Write();
   hLYvsTrackDistLY->Write();
-  //hLYvsDtime->Write();
   outputFile->Close();
 }
 
-/*
-    BEventMask* bmcmask=0;
-    trMC->SetBranchAddress("MCEventMask.",&bmcmask);
 
-      //consider first muon
-      Int_t imuon=0;
-      Double_t fMuonEnergy=bmcev->GetTrack(imuon)->GetMuonEnergy()*0.001;
-      
-      Double_t fTrackTheta=bmcev->GetTrack(imuon)->GetTheta();
-      Double_t fTrackPhi=bmcev->GetTrack(imuon)->GetPhi();
-      TVector3 truePoint(breco->GetMuonTrack()->GetX(),
-			 breco->GetMuonTrack()->GetY(),
-			 breco->GetMuonTrack()->GetZ());
-      Double_t trueTime=bmcev->GetFirstMuonTime();
- 
-      //fill track showers info from BMCEvent
-      Int_t fInteractionsN=bmcev->GetTrack(imuon)->GetInteractionN();
-      for (int iint=0; iint<fInteractionsN; iint++){
-	hInteractionE->Fill(bmcev->GetTrack(imuon)->GetInteraction(iint)->GetEnergy(),fEventWeight);
-      }
-      TVector3 somePoint(bgeomtel->At(chanID_global)->GetX(),
-			 bgeomtel->At(chanID_global)->GetY(),
-			 bgeomtel->At(chanID_global)->GetZ());
-
-  //TLegend *ll3 = new TLegend(0.15,0.18,0.65,0.38);
-	if ( chanID == showChanID )
-
-  snprintf(stmp, sizeof stmp,"Amplitude in OM %d of cluster %d [p.e.]",_iModuleShow,_jClusterShow);
-  snprintf(stmp, sizeof stmp,"OM %d in cluster %d",_iModuleShow,_jClusterShow);
-  TH1F* hamp = new TH1F("hamp",stmp,_ampnbin,_ampmin,_ampmax);
-
-  
-  if ( gROOT->GetListOfCanvases()->FindObject("ctr") == NULL )
-    ctr = new TCanvas("ctr","Ref time", 310, 10, 600, 400);
-  ctr->cd();
-  snprintf(stmp,sizeof stmp,"%s, Nevt = %d",stit,hreftime->GetEntries());  
-  hreftime->SetTitle(stmp);
-  hreftime->GetXaxis()->SetTitle("Time at ref reco track point [ns]");
-  hreftime->GetYaxis()->SetTitle("entries");
-  hreftime->DrawCopy();
-
-
-  if ( gROOT->GetListOfCanvases()->FindObject("c2cdt") == NULL )
-    c2cdt = new TCanvas("c2cdt","LY vs time dif", 1210, 410, 600, 400);
-  c2cdt->cd();
-  snprintf(stmp,sizeof stmp,"%s, Nevt = %d",stit,hLYvsDtime->GetEntries());  
-  hLYvsDtime->SetTitle(stmp);
-  hLYvsDtime->GetXaxis()->SetTitle("Pulse time - Ref time [ns]");
-  hLYvsDtime->GetYaxis()->SetTitle("LY [p.e.]");
-  hLYvsDtime->DrawCopy("colz");
-
-	std::cout<<"pulse: "<<ipulse<<"    chanID: "<<chanID<<"   pulse_charge: "<<pulse_charge<<"   pulse_time: "<<pulse_time<<std::endl;
-
-  	//Float_t pulse_charge = bevt->GetImpulse(ipulse)->GetAmplitude();  //p.e.
-	//int chanID = bevt->GetImpulse(ipulse)->GetChannelID();          //global numbering
-    
-
-	    int _maxNmuons = 100,
-	    int _iModuleShow = 100,
-	    int _jClusterShow = 1
-      Int_t showChanID=288*(_jClusterShow-1)+(_iModuleShow-1);
-      Int_t nChannels = bgeomtel->GetNumOMs();
-      if ( showChanID > nChannels ) {
-	std::cout << "Wrong module or cluster number" << std::endl;
-	return;
-      }
-
-*/
