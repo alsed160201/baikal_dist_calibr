@@ -66,6 +66,8 @@ void mcMuon(std::string _filelist,
   char stit[120];
   snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
 
+  TString fout = "./output/";
+
   TFile* outputFile = new TFile("./output/outputFile.root","recreate");
 
   TH1F* hNmuon = new TH1F("hNmuon","Number of muons in event",_nmuonnbin,_nmuonmin,_nmuonmax);
@@ -133,8 +135,11 @@ void mcMuon(std::string _filelist,
     trMC->SetBranchAddress("BRecoMuon.",&breco);
 
     std::cout<<"Events: "<<trMC->GetEntries()<<std::endl;
+
+
     
-    for (int i=0; i<trMC->GetEntries(); i++){      
+    for (int i=0; i<trMC->GetEntries(); i++){    
+
       trMC->GetEntry(i);
       
       Double_t eventWeight=bmcev->GetEventWeight();
@@ -191,13 +196,11 @@ void mcMuon(std::string _filelist,
 	TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
                                     bgeomtel->At(chanID)->GetY(),
                                     bgeomtel->At(chanID)->GetZ());
-            
-	//Double_t fDistToPoint=BMuonNamespace::TrackDistanceToPoint(&trueTrack, &somePoint);
+            ;
 	Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
 	if ( maxDist < distToPoint_BH ) maxDist = distToPoint_BH;
       
 	hLYvsTrackDist->Fill(distToPoint_BH,pulseLY,eventWeight);
-	//hLYvsDtime->Fill(dTime,pulseLY,eventWeight);
 	if ( nMuons >= _minNM && nMuons <= _maxNM )
 	  hLYvsTrackDistNM->Fill(distToPoint_BH,pulseLY,eventWeight);
 	if ( theta >= _minPA && theta <= _maxPA )
@@ -229,6 +232,7 @@ void mcMuon(std::string _filelist,
   hNmuon->GetXaxis()->SetTitle("Number of muons");
   hNmuon->GetYaxis()->SetTitle("entries");
   hNmuon->DrawCopy();
+  cnmuon->SaveAs(fout + "nmuons.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cly") == NULL )
     cly = new TCanvas("cly","LY", 10, 510, 400, 400);
@@ -239,6 +243,7 @@ void mcMuon(std::string _filelist,
   hly->GetXaxis()->SetTitle("LY in OMs [p.e.]");
   hly->GetYaxis()->SetTitle("entries");
   hly->DrawCopy();
+  cly->SaveAs(fout + "LY.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("ctt") == NULL )
     ctt = new TCanvas("ctt","True time", 510, 10, 400, 400);
@@ -258,6 +263,7 @@ void mcMuon(std::string _filelist,
   legctt->AddEntry(hreftime,sleg,"l");
   legctt->Draw("same");
   ctt->Update();
+  ctt->SaveAs(fout + "true_time.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("ct") == NULL )
     ct = new TCanvas("ct","Time", 510, 310, 400, 400);
@@ -267,6 +273,7 @@ void mcMuon(std::string _filelist,
   htimes->GetXaxis()->SetTitle("OM time [ns]");
   htimes->GetYaxis()->SetTitle("entries");
   htimes->DrawCopy();
+  ct->SaveAs(fout+"puls_time.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cdt") == NULL )
     cdt = new TCanvas("cdt","Time dif", 510, 610, 400, 400);
@@ -276,6 +283,7 @@ void mcMuon(std::string _filelist,
   hdt->GetXaxis()->SetTitle("OM time - Ref time [ns]");
   hdt->GetYaxis()->SetTitle("entries");
   hdt->DrawCopy();
+  cdt->SaveAs(fout+"rel_time.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("c2cd") == NULL )
@@ -319,7 +327,7 @@ void mcMuon(std::string _filelist,
   hLYvsTrackDistTD->GetXaxis()->SetTitle("Distance from reco track to OM [m]");
   hLYvsTrackDistTD->GetYaxis()->SetTitle("LY [p.e.]");
   hLYvsTrackDistTD->DrawCopy("colz");
-
+	
 
   outputFile->cd();
   hNmuon->Write();
