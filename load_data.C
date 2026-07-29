@@ -16,41 +16,34 @@
 #include "BGeomTel.h"
 
 //int NCLUSTER = 2;
-TCanvas* cnmuon; // number of muons in event
-TCanvas* ctt;    // true first muon time in ns
-TCanvas* ctr;    // reco time at ref track point in ns -----------
-TCanvas* cpa;    // polar angle of reconstructed muon
-TCanvas* cly;    // reco OM LY in p.e.
-TCanvas* ct;     // reco OM time in ns
-TCanvas* cdt;    // OM time difference to ref time in ns
-TCanvas* c2cd;   // reco LY vs distance no selections
-TCanvas* c2cdns; //  reco LY vs distance, number of muon selection
-TCanvas* c2cdas; //  reco LY vs distance, track angle selection
-TCanvas* c2cdts; //  reco LY vs distance, time dif selection
-TCanvas* c2cdls; //  reco LY vs distance, ly selection
-//TCanvas* c2td;   // reco time vs distance
 
-void load_data(std::string _filelist
-		, int save_event = 1
-		, int save_pulse = 1)
+void load_data(std::string _filelist,
+		  int save_event = 1,
+		  int save_pulse = 1,
+	          float _minTD = -400, // in ns
+	          float _maxTD = 400,
+		  float _minLY = 5     // in p.e.
+)
 {
   gStyle->SetOptTitle(1);
   gStyle->SetOptStat(0);
 
   //----------------output file configuration-------------
   TString fout = "./output/";
-  TFile* outputFile_event = new TFile(fout + "/mc_data_event.root","recreate");
-  TFile* outputFile_pulse = new TFile(fout + "/mc_data_pulse.root","recreate");
-  TTree *trOut_event = new TTree("eDataTree", "Postprocessed event mc data");
-  TTree *trOut_pulse = new TTree("pDataTree", "Postprocessed pulse mc data");
+  TFile* outputFile_event = TFile::Open(fout + "/mc_reco_event.root","recreate");
+  TTree *trOut_event = new TTree("eRecoTree", "Postprocessed event mc reco data");
+
+  TFile* outputFile_pulse = TFile::Open(fout + "/mc_reco_pulse.root","recreate");
+  TTree *trOut_pulse = new TTree("pRecoTree", "Postprocessed pulse mc reco data");
   
-  Int_t  eventId; 
+  Int_t  eventId = 0; 
   Int_t  nMuons;
-  Float_t trueTime, theta, phi, refTime;
+  Float_t trueTime, eventWeight, theta, phi, refTime;
 
   trOut_event->Branch("eventId", &eventId);
   trOut_event->Branch("nMuons", &nMuons);
   trOut_event->Branch("trueTime", &trueTime);
+  trOut_event->Branch("eventWeight", &eventWeight);
   trOut_event->Branch("theta", &theta);
   trOut_event->Branch("phi", &phi);
   trOut_event->Branch("refTime", &refTime);
@@ -105,14 +98,13 @@ void load_data(std::string _filelist
       trMC->GetEntry(i);
       eventId += 1;
       
-      Double_t eventWeight=bmcev->GetEventWeight();
+      eventWeight=bmcev->GetEventWeight();
       if ( eventWeight == 0 ) continue;      
       if (bmcev->GetTrack(0) == NULL) continue;
 
       //---- mc info ----------------------
       //number of muons, which produced response in the detector 
       nMuons = bmcev->GetResponseMuonsN();
-
       // true time of first muon
       trueTime = bmcev->GetFirstMuonTime();
 
@@ -128,10 +120,10 @@ void load_data(std::string _filelist
       TVector3 recoVec(sin(trackThetaRad)*cos(trackPhiRad),
 		       sin(trackThetaRad)*sin(trackPhiRad),
 		       cos(trackThetaRad));
-
       //reference point at the muon track and its time:
       TVector3 refPoint = breco->GetXYZRec();
-     
+   
+
       //loop over bevent pulses (fired OM's)
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
 	pulseLY = bevt->Q(ipulse);
@@ -144,6 +136,10 @@ void load_data(std::string _filelist
                                     bgeomtel->At(chanID)->GetZ());
           
 	distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+	
+	if ( pulseLY < _minLY) continue;
+	if ( dTime < _minTD || dTime > _maxTD ) continue;
+
         trOut_pulse->Fill();
       }
        trOut_event->Fill();
@@ -157,7 +153,6 @@ void load_data(std::string _filelist
   outputFile_pulse->cd();
   trOut_pulse->Write();
   outputFile_pulse->Close();
-
 }
 
 
