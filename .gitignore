@@ -1,3 +1,4 @@
 *.root
 *.pdf
 .nfs*
+.ipynb_checkpoints
