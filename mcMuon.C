@@ -23,10 +23,14 @@ TCanvas* cpa;    // polar angle of reconstructed muon
 TCanvas* cly;    // reco OM LY in p.e.
 TCanvas* ct;     // reco OM time in ns
 TCanvas* cdt;    // OM time difference to ref time in ns
+TCanvas* cdtevsr;    // Reco minus Expected OM time difference in ns
+TCanvas* cnoms;    // Number of fired OM vs dist from track
+TCanvas* cnomt;    // Number of total OM vs dist from track
 TCanvas* c2cd;   // reco LY vs distance no selections
 TCanvas* c2cdns; //  reco LY vs distance, number of muon selection
 TCanvas* c2cdas; //  reco LY vs distance, track angle selection
 TCanvas* c2cdts; //  reco LY vs distance, time dif selection
+TCanvas* c2cdtsevsr; //  reco LY vs distance, Expected minus Reco time dif selection
 TCanvas* c2cdls; //  reco LY vs distance, ly selection
 //TCanvas* c2td;   // reco time vs distance
 
@@ -37,6 +41,8 @@ void mcMuon(std::string _filelist,
 	    float _maxPA = 180,
 	    float _minTD = -500, // in ns
 	    float _maxTD = 500,
+	    float _minTDEvsR = -20, 
+	    float _maxTDEvsR = 40,// in ns
 	    float _minLY = 5,     // in p.e.
 	    int _nmuonnbin = 70,
 	    float _nmuonmin = 0,
@@ -50,12 +56,17 @@ void mcMuon(std::string _filelist,
 	    int _dtimenbin = 200,
 	    float _dtimemin = -4000, 
 	    float _dtimemax = 4000,// in ns
+	    float _dtimeminEvsR = -100, 
+	    float _dtimemaxEvsR = 200,// in ns
 	    int _lynbin = 100,
 	    float _lymin = 10,
 	    float _lymax = 110, // in p.e.
 	    int _distnbin = 100,
 	    float _distmin = 0, 
-	    float _distmax = 1000 // in m ??????
+	    float _distmax = 500, // in m ??????
+	    float _rmin = 5,
+	    float _rmax = 30,      
+            float _nsteps = 10   // in m
 )
 {
   gStyle->SetOptTitle(1);
@@ -77,6 +88,9 @@ void mcMuon(std::string _filelist,
   TH1F* hly = new TH1F("hly","Pulse LY",_lynbin,_lymin,_lymax);
   TH1F* htimes = new TH1F("htimes","Pulse times",_timenbin,_timemin,_timemax);
   TH1F* hdt = new TH1F("hdt","OM time - ref time",_dtimenbin,_dtimemin,_dtimemax);
+  TH1F* hdtEvsR = new TH1F("hdt","OM time - ref time",_dtimenbin,_dtimeminEvsR,_dtimemaxEvsR);
+  TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
+  TH1F* hTrackDistTotalOM = new TH1F("TrackDistTotalOM ", "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
 
   TH2F* hLYvsTrackDist = new TH2F("hLYvsTrackDist","LY vs dist to OM",
 				  _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
@@ -85,6 +99,8 @@ void mcMuon(std::string _filelist,
   TH2F* hLYvsTrackDistPA = new TH2F("hLYvsTrackDistPA","LY vs dist to OM, cut on polar angle",
 				     _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
   TH2F* hLYvsTrackDistTD = new TH2F("hLYvsTrackDistTD","LY vs dist to OM, cut on time dif",
+				     _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
+  TH2F* hLYvsTrackDistTDEvsR = new TH2F("hLYvsTrackDistTDEvsR","LY vs dist to OM, cut on Expected vs Reco time dif",
 				     _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
   TH2F* hLYvsTrackDistLY = new TH2F("hLYvsTrackDistLY","LY vs dist to OM, cut on LY",
 				     _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
@@ -100,9 +116,20 @@ void mcMuon(std::string _filelist,
   float minDtime = 0;
   float maxDtime = 0;
 
+  /*Double_t r_x[_nsteps];
+  Double_t r_y[_nsteps];
+  Double_t r_ex[_nsteps];
+  Double_t r_ey[_nsteps];
+
+  for (int i = 0; i < _nsteps; ++i) {
+	r_x[i] = _rmin + (i + 0.5) * _step;
+        r_ex[i] = 0.5 * _rstep;
+  }*/
+
   //---------- read file 
   int ifile=0;
   char tmp[100];
+  int nRecoEvents= 0;
   ifstream flist_mc;   
   flist_mc.open(_filelist.data());
   while (!flist_mc.eof()){
@@ -145,6 +172,17 @@ void mcMuon(std::string _filelist,
       Double_t eventWeight=bmcev->GetEventWeight();
       if ( eventWeight == 0 ) continue;      
       if (bmcev->GetTrack(0) == NULL) continue;
+
+      //====================selection cuts===================================
+      if (breco->GetDEDX_energy() >= 3) continue;
+      if (breco->GetNHits() < 8) continue;
+      if (breco->GetNStrings() < 3) continue;
+      if (breco->GetCovMatrixStatus() != 3) continue;
+      if (breco->GetThetaRec() <120) continue;
+      if (breco->GetZDist() < 200) continue;
+      nRecoEvents++;
+      //=====================================================================
+      
 
       //---- mc info ----------------------
       //number of muons, which produced response in the detector 
@@ -198,6 +236,15 @@ void mcMuon(std::string _filelist,
                                     bgeomtel->At(chanID)->GetZ());
             ;
 	Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+	Double_t ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
+	Double_t dTimeExpVsRec = dTime - ExpectedOMTime;
+
+	hdtEvsR->Fill(dTimeExpVsRec,eventWeight);
+
+	if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR && pulseLY >= _minLY) {
+	   hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
+	}
+
 	if ( maxDist < distToPoint_BH ) maxDist = distToPoint_BH;
       
 	hLYvsTrackDist->Fill(distToPoint_BH,pulseLY,eventWeight);
@@ -207,9 +254,21 @@ void mcMuon(std::string _filelist,
 	  hLYvsTrackDistPA->Fill(distToPoint_BH,pulseLY,eventWeight);
 	if ( dTime >= _minTD && dTime <= _maxTD )
 	  hLYvsTrackDistTD->Fill(distToPoint_BH,pulseLY,eventWeight);
+	if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR)
+	  hLYvsTrackDistTDEvsR->Fill(distToPoint_BH,pulseLY,eventWeight);
 	if ( pulseLY >= _minLY )
 	  hLYvsTrackDistLY->Fill(distToPoint_BH,pulseLY,eventWeight);
       }
+
+      for (int channel = 0; channel < bgeomtel->GetNumOMs(); channel++){
+
+        TVector3 chanPos = TVector3(bgeomtel->At(channel)->GetX(),
+		                    bgeomtel->At(channel)->GetY(),
+		                    bgeomtel->At(channel)->GetZ()); 
+        Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+        hTrackDistTotalOM->Fill(distToPoint_BH,eventWeight);
+      }
+  
     }
   }
 
@@ -285,6 +344,54 @@ void mcMuon(std::string _filelist,
   hdt->DrawCopy();
   cdt->SaveAs(fout+"rel_time.pdf");
 
+  if ( gROOT->GetListOfCanvases()->FindObject("cdtevsr") == NULL )
+    cdtevsr = new TCanvas("cdtevsr","Reco vs Expected Time dif", 510, 610, 400, 400);
+  cdtevsr->cd();
+  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hdtEvsR->GetEntries()));  
+  hdtEvsR->SetTitle(stmp);
+  hdtEvsR->GetXaxis()->SetTitle("Expected dtime - Reco dtime [ns]");
+  hdtEvsR->GetYaxis()->SetTitle("entries");
+  hdtEvsR->DrawCopy();
+  cdtevsr->SaveAs(fout+"evsr_dtime.pdf");
+
+  if ( gROOT->GetListOfCanvases()->FindObject("cnomt") == NULL )
+    cnomt = new TCanvas("cnomt","Number of total OM vs dist from track", 510, 610, 400, 400);
+  cnomt->cd();
+  TLegend* legnom = new TLegend(0.5,0.7,0.85,0.85);
+  legnom->SetTextSize(0.045);
+  hTrackDistSigOM->Scale(1.0/nRecoEvents);
+  hTrackDistTotalOM->Scale(1.0/nRecoEvents);
+  TH1F *hTrackDistZeroOM = (TH1F*) hTrackDistTotalOM->Clone("hTrackDistZeroOM");
+  hTrackDistZeroOM->SetTitle("number of zero OM vs dist from track");
+  hTrackDistZeroOM->Add(hTrackDistSigOM, -1.0);
+
+  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));  
+  hTrackDistTotalOM->SetTitle(stmp);
+  //hTrackDistTotalOM->SetMinimum(0);
+  hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
+  hTrackDistTotalOM->GetYaxis()->SetTitle("hits");
+  hTrackDistTotalOM->DrawCopy();
+  snprintf(sleg, sizeof sleg,"total OM");
+  legnom->AddEntry(hTrackDistTotalOM,sleg,"l");
+  hTrackDistZeroOM->SetLineColor(2);
+  hTrackDistZeroOM->SetMarkerColor(2);
+  hTrackDistZeroOM->DrawCopy("same");
+  snprintf(sleg, sizeof sleg,"zero OM");
+  legnom->AddEntry(hTrackDistZeroOM,sleg,"l");
+  legnom->Draw("same");
+  cnomt->Update();
+  cnomt->SaveAs(fout+"totalnom_vs_dist.pdf");
+
+  if ( gROOT->GetListOfCanvases()->FindObject("cnoms") == NULL )
+    cnoms = new TCanvas("cnoms","Number of signal OM vs dist from track", 510, 610, 400, 400);
+  cnoms->cd();
+  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));  
+  hTrackDistSigOM->SetTitle(stmp);
+  hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
+  hTrackDistSigOM->GetYaxis()->SetTitle("hits");
+  hTrackDistSigOM->DrawCopy();
+  cnoms->SaveAs(fout+"signom_vs_dist.pdf");
+
 
   if ( gROOT->GetListOfCanvases()->FindObject("c2cd") == NULL )
     c2cd = new TCanvas("c2cd","LY vs Dist", 1010, 10, 600, 400);
@@ -327,6 +434,20 @@ void mcMuon(std::string _filelist,
   hLYvsTrackDistTD->GetXaxis()->SetTitle("Distance from reco track to OM [m]");
   hLYvsTrackDistTD->GetYaxis()->SetTitle("LY [p.e.]");
   hLYvsTrackDistTD->DrawCopy("colz");
+
+
+  if ( gROOT->GetListOfCanvases()->FindObject("c2cdtsevsr") == NULL )
+    c2cdtsevsr = new TCanvas("c2cdtsevsr","LY vs Dist, reco vs expected time dif sel", 1010, 610, 600, 400);
+  c2cdtsevsr->cd();
+  snprintf(stmp,sizeof stmp,"%s, %4.0f #leq Exp vs Reco dt #leq %4.0f ns, N = %d (%5.3f)",
+	   stit,_minTDEvsR, _maxTDEvsR, int(hLYvsTrackDistTDEvsR->GetEntries()),
+	   float(hLYvsTrackDistTDEvsR->GetEntries())/float(hLYvsTrackDistTDEvsR->GetEntries()));  
+  hLYvsTrackDistTDEvsR->SetTitle(stmp);
+  hLYvsTrackDistTDEvsR->GetXaxis()->SetTitle("Distance from reco track to OM [m]");
+  hLYvsTrackDistTDEvsR->GetYaxis()->SetTitle("LY [p.e.]");
+  hLYvsTrackDistTDEvsR->DrawCopy("colz");
+
+
 	
 
   outputFile->cd();
@@ -337,10 +458,12 @@ void mcMuon(std::string _filelist,
   hly->Write();
   htimes->Write();
   hdt->Write();
+  hdtEvsR->Write();
   hLYvsTrackDist->Write();
   hLYvsTrackDistNM->Write();
   hLYvsTrackDistPA->Write();
   hLYvsTrackDistTD->Write();
+  hLYvsTrackDistTDEvsR->Write();
   hLYvsTrackDistLY->Write();
   outputFile->Close();
 }

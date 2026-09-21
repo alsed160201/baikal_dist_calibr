@@ -21,8 +21,8 @@ void load_data(std::string _filelist,
 		  int save_event = 1,
 		  int save_pulse = 1,
 		  int save_gentrk = 1,
-	          float _minTD = -400, // in ns
-	          float _maxTD = 400,
+	          float _minTD = -1000, // in ns
+	          float _maxTD = 2000,
 		  float _minLY = 5     // in p.e.
 )
 {
@@ -82,14 +82,17 @@ void load_data(std::string _filelist,
   TTree *trOut_pulse = new TTree("pRecoTree", "Postprocessed pulse mc reco data");
 
   Int_t  chanID;
-  Float_t pulseLY,  pulseTime, dTime, RecoDistToPoint_BH, trueFirstMuonDistToPoint_BH;
+  Float_t pulseLY,  pulseTime, dTime, OEdTime, pulseZ, RecoDistToPoint_BH, ExpectedOMTime, trueFirstMuonDistToPoint_BH;
   trOut_pulse->Branch("eventId", &eventId); 
   trOut_pulse->Branch("number", &number);
   trOut_pulse->Branch("chanID", &chanID); 
   trOut_pulse->Branch("pulseLY", &pulseLY); 
   trOut_pulse->Branch("pulseTime", &pulseTime); 
   trOut_pulse->Branch("dTime", &dTime); 
+  trOut_pulse->Branch("OEdTime", &OEdTime);
+  trOut_pulse->Branch("pulseZ", &pulseZ);
   trOut_pulse->Branch("RecoDistToPoint_BH", &RecoDistToPoint_BH); 
+  trOut_pulse->Branch("ExpectedOMTime", &ExpectedOMTime);
   trOut_pulse->Branch("trueFirstMuonDistToPoint_BH", &trueFirstMuonDistToPoint_BH); 
 
   //----------------read file------------------------------- 
@@ -219,10 +222,13 @@ void load_data(std::string _filelist,
 	TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
                                     bgeomtel->At(chanID)->GetY(),
                                     bgeomtel->At(chanID)->GetZ());
-          
+        
+	pulseZ = bgeomtel->At(chanID)->GetZ();  
 	RecoDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+	ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
 	trueFirstMuonDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(trueFirstMuonPoint, trueFirstMuonVec, chanPos);
-	
+	OEdTime = ExpectedOMTime - dTime;	
+
 	if ( pulseLY < _minLY) continue;
 	if ( dTime < _minTD || dTime > _maxTD ) continue;
 
