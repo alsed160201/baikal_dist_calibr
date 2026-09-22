@@ -2,3 +2,5 @@
 *.pdf
 .nfs*
 .ipynb_checkpoints
+._*
+.DS_Store

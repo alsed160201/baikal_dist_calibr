@@ -24,10 +24,12 @@ TCanvas* cphe;    // Number of ph. e.
 TCanvas* cpheGroups;    // Number of ph. e. split by groups
 TCanvas* cpheCuts;    // Number of ph. e. split by pulseLY cut level
 
-void OMcalib(std::string _filelist,
+void OMdistProfile(std::string _filelist,
 	    float _rmin = 2.5,
-	    float _rmax = 40,      
-            float _nsteps = 15   // in m
+	    float _rmax = 40,
+      float _nsteps = 15,   // in m
+      bool _doGroupPlots = true,   // build hTrackDistSigOM_g/hTrackDistTotalOM_g and the per-group ph.e. plot
+      bool _doCutPlots = true      // build hTrackDistSigOM_c and the per-pulseLY-cut ph.e. plot
 )
 {
   gStyle->SetOptTitle(1);
@@ -40,7 +42,7 @@ void OMcalib(std::string _filelist,
 
   TString fout = "./output/figures/";
 
-  TFile* outputFile = new TFile("./output/outputFile.root","recreate");
+  TFile* outputFile = new TFile("./output/data/OMdistProfileFile.root","recreate");
 
   TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
   hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
@@ -74,11 +76,18 @@ void OMcalib(std::string _filelist,
   //   return ev.breco->GetNStrings();
   // };
 
-  //========================= example 3: split by reconstructed zenith angle =========================
-  TString groupVarName = "#theta rec, deg";
-  std::vector<Double_t> groupEdges = {120, 140, 160, 181};
+  //========================= example 3: split by reconstructed reconstructed theta angle =========================
+  // TString groupVarName = "#theta rec, deg";
+  // std::vector<Double_t> groupEdges = {120, 140, 160, 181};
+  // auto GetGroupingVariable = [](const EventRefs& ev) -> Double_t {
+  //   return ev.breco->GetThetaRec();
+  // };
+
+    //========================= example 4: split by reconstructed reconstructed source zenith angle =========================
+  TString groupVarName = "zenith angle";
+  std::vector<Double_t> groupEdges = {0, 20, 40, 81};
   auto GetGroupingVariable = [](const EventRefs& ev) -> Double_t {
-    return ev.breco->GetThetaRec();
+    return ev.breco->GetSourceZenithRec();
   };
 
 
@@ -105,11 +114,13 @@ void OMcalib(std::string _filelist,
   std::vector<TH1F*> hTrackDistTotalOM_g(nGroups);
   std::vector<int> nRecoEvents_g(nGroups, 0);
 
-  for (int g=0; g<nGroups; g++){
-    hTrackDistSigOM_g[g] = new TH1F(Form("TrackDistSigOM_g%d",g), "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
-    hTrackDistSigOM_g[g]->GetXaxis()->SetTitle("OM dist, m");
-    hTrackDistTotalOM_g[g] = new TH1F(Form("TrackDistTotalOM_g%d",g), "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
-    hTrackDistTotalOM_g[g]->GetXaxis()->SetTitle("OM dist, m");
+  if (_doGroupPlots){
+    for (int g=0; g<nGroups; g++){
+      hTrackDistSigOM_g[g] = new TH1F(Form("TrackDistSigOM_g%d",g), "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
+      hTrackDistSigOM_g[g]->GetXaxis()->SetTitle("OM dist, m");
+      hTrackDistTotalOM_g[g] = new TH1F(Form("TrackDistTotalOM_g%d",g), "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
+      hTrackDistTotalOM_g[g]->GetXaxis()->SetTitle("OM dist, m");
+    }
   }
 
   //=========== pulseLY cut-level configuration ===========
@@ -129,9 +140,11 @@ void OMcalib(std::string _filelist,
   }
 
   std::vector<TH1F*> hTrackDistSigOM_c(nCuts);
-  for (int c=0; c<nCuts; c++){
-    hTrackDistSigOM_c[c] = new TH1F(Form("TrackDistSigOM_c%d",c), "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
-    hTrackDistSigOM_c[c]->GetXaxis()->SetTitle("OM dist, m");
+  if (_doCutPlots){
+    for (int c=0; c<nCuts; c++){
+      hTrackDistSigOM_c[c] = new TH1F(Form("TrackDistSigOM_c%d",c), "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
+      hTrackDistSigOM_c[c]->GetXaxis()->SetTitle("OM dist, m");
+    }
   }
 
   //---------- read file
@@ -180,16 +193,15 @@ void OMcalib(std::string _filelist,
       if ( eventWeight == 0 ) continue;      
       if (bmcev->GetTrack(0) == NULL) continue;
 
-      //====================selection cuts===================================
-      // if (breco->GetDEDX_energy() >= 3) continue;
+      //====================selection cuts=================================== 
       if (breco->GetNHits() < 8) continue;
       if (breco->GetNStrings() < 2) continue;
       if (breco->GetCovMatrixStatus() != 3) continue;
       if (breco->GetThetaRec() <= 100) continue;
       if (breco->GetZDist() < 200) continue;
 
+      // if (breco->GetDEDX_energy() >= 3) continue;
       // if (bmcev->GetMuonsN() > 3) continue;
-
       //if (breco->GetClassBDT() > 0.25) continue;
       //if (breco->GetClassBDTLowE() > 0.25) continue;
       nRecoEvents++;
@@ -241,10 +253,12 @@ void OMcalib(std::string _filelist,
         if ( dTimeExpVsRec < -20 || dTimeExpVsRec > 40) continue;
 
         hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
-        if (groupIdx >= 0) hTrackDistSigOM_g[groupIdx]->Fill(distToPoint_BH,eventWeight);
+        if (_doGroupPlots && groupIdx >= 0) hTrackDistSigOM_g[groupIdx]->Fill(distToPoint_BH,eventWeight);
 
-        for (int c=0; c<nCuts; c++){
-          if (pulseLY > pulseLYCuts[c]) hTrackDistSigOM_c[c]->Fill(distToPoint_BH,eventWeight);
+        if (_doCutPlots){
+          for (int c=0; c<nCuts; c++){
+            if (pulseLY > pulseLYCuts[c]) hTrackDistSigOM_c[c]->Fill(distToPoint_BH,eventWeight);
+          }
         }
 
       }
@@ -256,7 +270,7 @@ void OMcalib(std::string _filelist,
 		                    bgeomtel->At(channel)->GetZ());
         Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
         hTrackDistTotalOM->Fill(distToPoint_BH,eventWeight);
-        if (groupIdx >= 0) hTrackDistTotalOM_g[groupIdx]->Fill(distToPoint_BH,eventWeight);
+        if (_doGroupPlots && groupIdx >= 0) hTrackDistTotalOM_g[groupIdx]->Fill(distToPoint_BH,eventWeight);
       }
   
     }
@@ -281,26 +295,28 @@ void OMcalib(std::string _filelist,
   std::vector<TH1F*> hTrackDistZeroOMfrac_g(nGroups);
   std::vector<TGraphErrors*> pheGraph_g(nGroups);
 
-  for (int g=0; g<nGroups; g++){
-    if (nRecoEvents_g[g] > 0){
-      hTrackDistSigOM_g[g]->Scale(1.0/nRecoEvents_g[g]);
-      hTrackDistTotalOM_g[g]->Scale(1.0/nRecoEvents_g[g]);
+  if (_doGroupPlots){
+    for (int g=0; g<nGroups; g++){
+      if (nRecoEvents_g[g] > 0){
+        hTrackDistSigOM_g[g]->Scale(1.0/nRecoEvents_g[g]);
+        hTrackDistTotalOM_g[g]->Scale(1.0/nRecoEvents_g[g]);
+      }
+
+      hTrackDistZeroOM_g[g] = (TH1F*) hTrackDistTotalOM_g[g]->Clone(Form("hTrackDistZeroOM_g%d",g));
+      hTrackDistZeroOM_g[g]->SetTitle("number of zero OM vs dist from track");
+      hTrackDistZeroOM_g[g]->Add(hTrackDistSigOM_g[g], -1.0);
+
+      hTrackDistZeroOMfrac_g[g] = (TH1F*) hTrackDistZeroOM_g[g]->Clone(Form("hTrackDistZeroOMfrac_g%d",g));
+      hTrackDistZeroOMfrac_g[g]->SetTitle("fraction of zero OM vs dist from track");
+      hTrackDistZeroOMfrac_g[g]->Divide(hTrackDistTotalOM_g[g]);
+
+      pheGraph_g[g] = MakeLogGraph(hTrackDistZeroOMfrac_g[g]);
+      pheGraph_g[g]->SetName(Form("g_ln_hTrackDistZeroOMfrac_g%d",g));
+      pheGraph_g[g]->SetTitle(groupLabels[g]+";OM dist, m;proxy ph. e.");
+      pheGraph_g[g]->SetLineColor(groupColors[g % groupColors.size()]);
+      pheGraph_g[g]->SetMarkerColor(groupColors[g % groupColors.size()]);
+      pheGraph_g[g]->SetMarkerStyle(20+g);
     }
-
-    hTrackDistZeroOM_g[g] = (TH1F*) hTrackDistTotalOM_g[g]->Clone(Form("hTrackDistZeroOM_g%d",g));
-    hTrackDistZeroOM_g[g]->SetTitle("number of zero OM vs dist from track");
-    hTrackDistZeroOM_g[g]->Add(hTrackDistSigOM_g[g], -1.0);
-
-    hTrackDistZeroOMfrac_g[g] = (TH1F*) hTrackDistZeroOM_g[g]->Clone(Form("hTrackDistZeroOMfrac_g%d",g));
-    hTrackDistZeroOMfrac_g[g]->SetTitle("fraction of zero OM vs dist from track");
-    hTrackDistZeroOMfrac_g[g]->Divide(hTrackDistTotalOM_g[g]);
-
-    pheGraph_g[g] = MakeLogGraph(hTrackDistZeroOMfrac_g[g]);
-    pheGraph_g[g]->SetName(Form("g_ln_hTrackDistZeroOMfrac_g%d",g));
-    pheGraph_g[g]->SetTitle(groupLabels[g]+";OM dist, m;proxy ph. e.");
-    pheGraph_g[g]->SetLineColor(groupColors[g % groupColors.size()]);
-    pheGraph_g[g]->SetMarkerColor(groupColors[g % groupColors.size()]);
-    pheGraph_g[g]->SetMarkerStyle(20+g);
   }
 
   //-------------OM hist magic per pulseLY cut level------------------------
@@ -308,23 +324,25 @@ void OMcalib(std::string _filelist,
   std::vector<TH1F*> hTrackDistZeroOMfrac_c(nCuts);
   std::vector<TGraphErrors*> pheGraph_c(nCuts);
 
-  for (int c=0; c<nCuts; c++){
-    hTrackDistSigOM_c[c]->Scale(1.0/nRecoEvents);
+  if (_doCutPlots){
+    for (int c=0; c<nCuts; c++){
+      hTrackDistSigOM_c[c]->Scale(1.0/nRecoEvents);
 
-    hTrackDistZeroOM_c[c] = (TH1F*) hTrackDistTotalOM->Clone(Form("hTrackDistZeroOM_c%d",c));
-    hTrackDistZeroOM_c[c]->SetTitle("number of zero OM vs dist from track");
-    hTrackDistZeroOM_c[c]->Add(hTrackDistSigOM_c[c], -1.0);
+      hTrackDistZeroOM_c[c] = (TH1F*) hTrackDistTotalOM->Clone(Form("hTrackDistZeroOM_c%d",c));
+      hTrackDistZeroOM_c[c]->SetTitle("number of zero OM vs dist from track");
+      hTrackDistZeroOM_c[c]->Add(hTrackDistSigOM_c[c], -1.0);
 
-    hTrackDistZeroOMfrac_c[c] = (TH1F*) hTrackDistZeroOM_c[c]->Clone(Form("hTrackDistZeroOMfrac_c%d",c));
-    hTrackDistZeroOMfrac_c[c]->SetTitle("fraction of zero OM vs dist from track");
-    hTrackDistZeroOMfrac_c[c]->Divide(hTrackDistTotalOM);
+      hTrackDistZeroOMfrac_c[c] = (TH1F*) hTrackDistZeroOM_c[c]->Clone(Form("hTrackDistZeroOMfrac_c%d",c));
+      hTrackDistZeroOMfrac_c[c]->SetTitle("fraction of zero OM vs dist from track");
+      hTrackDistZeroOMfrac_c[c]->Divide(hTrackDistTotalOM);
 
-    pheGraph_c[c] = MakeLogGraph(hTrackDistZeroOMfrac_c[c]);
-    pheGraph_c[c]->SetName(Form("g_ln_hTrackDistZeroOMfrac_c%d",c));
-    pheGraph_c[c]->SetTitle(cutLabels[c]+";OM dist, m;proxy ph. e.");
-    pheGraph_c[c]->SetLineColor(cutColors[c % cutColors.size()]);
-    pheGraph_c[c]->SetMarkerColor(cutColors[c % cutColors.size()]);
-    pheGraph_c[c]->SetMarkerStyle(20+c);
+      pheGraph_c[c] = MakeLogGraph(hTrackDistZeroOMfrac_c[c]);
+      pheGraph_c[c]->SetName(Form("g_ln_hTrackDistZeroOMfrac_c%d",c));
+      pheGraph_c[c]->SetTitle(cutLabels[c]+";OM dist, m;proxy ph. e.");
+      pheGraph_c[c]->SetLineColor(cutColors[c % cutColors.size()]);
+      pheGraph_c[c]->SetMarkerColor(cutColors[c % cutColors.size()]);
+      pheGraph_c[c]->SetMarkerStyle(20+c);
+    }
   }
 
   //------------- plot to canvas----------------------
@@ -361,6 +379,8 @@ void OMcalib(std::string _filelist,
   hTrackDistSigOM->DrawCopy();
   cnoms->SaveAs(fout+"signom_vs_dist.pdf");
 
+
+
   if ( gROOT->GetListOfCanvases()->FindObject("cphe") == NULL )
     cphe = new TCanvas("cphe","ph. e. estimation", 510, 610, 400, 400);
   cphe->cd();
@@ -370,47 +390,51 @@ void OMcalib(std::string _filelist,
 
 
 
-  if ( gROOT->GetListOfCanvases()->FindObject("cpheGroups") == NULL )
-    cpheGroups = new TCanvas("cpheGroups", TString("ph. e. estimation by "+groupVarName).Data(), 510, 610, 400, 400);
-  cpheGroups->cd();
-  //cpheGroups->SetLogy(1);
-  TLegend* legphe = new TLegend(0.55,0.7,0.88,0.9);
-  legphe->SetTextSize(0.035);
-  // frame's y-range is taken only from the first ("AP") graph; SetRangeUser on
-  // the already-created frame axis (unlike SetMaximum) reliably overrides it,
-  // so points from the other groups ("P SAME") aren't clipped at the top
-  pheGraph_g[0]->Draw("AP");
-  pheGraph_g[0]->GetYaxis()->SetRangeUser(0.0, 1.0);
-  legphe->AddEntry(pheGraph_g[0], groupLabels[0], "lp");
-  for (int g=1; g<nGroups; g++){
-    pheGraph_g[g]->Draw("P SAME");
-    legphe->AddEntry(pheGraph_g[g], groupLabels[g], "lp");
+  if (_doGroupPlots){
+    if ( gROOT->GetListOfCanvases()->FindObject("cpheGroups") == NULL )
+      cpheGroups = new TCanvas("cpheGroups", TString("ph. e. estimation by "+groupVarName).Data(), 510, 610, 400, 400);
+    cpheGroups->cd();
+    //cpheGroups->SetLogy(1);
+    TLegend* legphe = new TLegend(0.55,0.7,0.88,0.9);
+    legphe->SetTextSize(0.035);
+    // frame's y-range is taken only from the first ("AP") graph; SetRangeUser on
+    // the already-created frame axis (unlike SetMaximum) reliably overrides it,
+    // so points from the other groups ("P SAME") aren't clipped at the top
+    pheGraph_g[0]->Draw("AP");
+    pheGraph_g[0]->GetYaxis()->SetRangeUser(0.0, 1.0);
+    legphe->AddEntry(pheGraph_g[0], groupLabels[0], "lp");
+    for (int g=1; g<nGroups; g++){
+      pheGraph_g[g]->Draw("P SAME");
+      legphe->AddEntry(pheGraph_g[g], groupLabels[g], "lp");
+    }
+    if (pheGraph_g[0]->GetHistogram())
+      pheGraph_g[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
+    legphe->Draw("same");
+    cpheGroups->Update();
+    cpheGroups->SaveAs(fout+"phe_estimation_groups.pdf");
   }
-  if (pheGraph_g[0]->GetHistogram())
-    pheGraph_g[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
-  legphe->Draw("same");
-  cpheGroups->Update();
-  cpheGroups->SaveAs(fout+"phe_estimation_groups.pdf");
 
 
-  if ( gROOT->GetListOfCanvases()->FindObject("cpheCuts") == NULL )
-    cpheCuts = new TCanvas("cpheCuts", TString("ph. e. estimation by "+cutVarName).Data(), 510, 610, 400, 400);
-  cpheCuts->cd();
-  //cpheCuts->SetLogy(1);
-  TLegend* legpheCuts = new TLegend(0.55,0.7,0.88,0.9);
-  legpheCuts->SetTextSize(0.035);
-  pheGraph_c[0]->Draw("AP");
-  pheGraph_c[0]->GetYaxis()->SetRangeUser(0.0, 1.0);
-  legpheCuts->AddEntry(pheGraph_c[0], cutLabels[0], "lp");
-  for (int c=1; c<nCuts; c++){
-    pheGraph_c[c]->Draw("P SAME");
-    legpheCuts->AddEntry(pheGraph_c[c], cutLabels[c], "lp");
+  if (_doCutPlots){
+    if ( gROOT->GetListOfCanvases()->FindObject("cpheCuts") == NULL )
+      cpheCuts = new TCanvas("cpheCuts", TString("ph. e. estimation by "+cutVarName).Data(), 510, 610, 400, 400);
+    cpheCuts->cd();
+    //cpheCuts->SetLogy(1);
+    TLegend* legpheCuts = new TLegend(0.55,0.7,0.88,0.9);
+    legpheCuts->SetTextSize(0.035);
+    pheGraph_c[0]->Draw("AP");
+    pheGraph_c[0]->GetYaxis()->SetRangeUser(0.0, 1.0);
+    legpheCuts->AddEntry(pheGraph_c[0], cutLabels[0], "lp");
+    for (int c=1; c<nCuts; c++){
+      pheGraph_c[c]->Draw("P SAME");
+      legpheCuts->AddEntry(pheGraph_c[c], cutLabels[c], "lp");
+    }
+    if (pheGraph_c[0]->GetHistogram())
+      pheGraph_c[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
+    legpheCuts->Draw("same");
+    cpheCuts->Update();
+    cpheCuts->SaveAs(fout+"phe_estimation_pulseLY_cuts.pdf");
   }
-  if (pheGraph_c[0]->GetHistogram())
-    pheGraph_c[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
-  legpheCuts->Draw("same");
-  cpheCuts->Update();
-  cpheCuts->SaveAs(fout+"phe_estimation_pulseLY_cuts.pdf");
 
 
   //------------write into file------------------
@@ -420,18 +444,22 @@ void OMcalib(std::string _filelist,
   hTrackDistZeroOM->Write();
   hTrackDistZeroOMfrac->Write();
   pheGraph->Write();
-  for (int g=0; g<nGroups; g++){
-    hTrackDistSigOM_g[g]->Write();
-    hTrackDistTotalOM_g[g]->Write();
-    hTrackDistZeroOM_g[g]->Write();
-    hTrackDistZeroOMfrac_g[g]->Write();
-    pheGraph_g[g]->Write();
+  if (_doGroupPlots){
+    for (int g=0; g<nGroups; g++){
+      hTrackDistSigOM_g[g]->Write();
+      hTrackDistTotalOM_g[g]->Write();
+      hTrackDistZeroOM_g[g]->Write();
+      hTrackDistZeroOMfrac_g[g]->Write();
+      pheGraph_g[g]->Write();
+    }
   }
-  for (int c=0; c<nCuts; c++){
-    hTrackDistSigOM_c[c]->Write();
-    hTrackDistZeroOM_c[c]->Write();
-    hTrackDistZeroOMfrac_c[c]->Write();
-    pheGraph_c[c]->Write();
+  if (_doCutPlots){
+    for (int c=0; c<nCuts; c++){
+      hTrackDistSigOM_c[c]->Write();
+      hTrackDistZeroOM_c[c]->Write();
+      hTrackDistZeroOMfrac_c[c]->Write();
+      pheGraph_c[c]->Write();
+    }
   }
   outputFile->Close();
 }

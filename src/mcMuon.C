@@ -59,14 +59,14 @@ void mcMuon(std::string _filelist,
 	    float _dtimeminEvsR = -100, 
 	    float _dtimemaxEvsR = 200,// in ns
 	    int _lynbin = 100,
-	    float _lymin = 10,
+	    float _lymin = 0,
 	    float _lymax = 110, // in p.e.
 	    int _distnbin = 100,
 	    float _distmin = 0, 
 	    float _distmax = 500, // in m ??????
 	    float _rmin = 5,
 	    float _rmax = 30,      
-            float _nsteps = 10   // in m
+      float _nsteps = 10   // in m
 )
 {
   gStyle->SetOptTitle(1);
@@ -79,7 +79,7 @@ void mcMuon(std::string _filelist,
 
   TString fout = "./output/";
 
-  TFile* outputFile = new TFile(fout + "data/outputFile.root","recreate");
+  TFile* outputFile = new TFile(fout + "data/mcMuonFile.root","recreate");
 
   TH1F* hNmuon = new TH1F("hNmuon","Number of muons in event",_nmuonnbin,_nmuonmin,_nmuonmax);
   TH1F* htruetime = new TH1F("htruetime","MC time of first muon",_timenbin,_timemin,_timemax);
@@ -174,12 +174,16 @@ void mcMuon(std::string _filelist,
       if (bmcev->GetTrack(0) == NULL) continue;
 
       //====================selection cuts===================================
-      if (breco->GetDEDX_energy() >= 3) continue;
       if (breco->GetNHits() < 8) continue;
-      if (breco->GetNStrings() < 3) continue;
+      if (breco->GetNStrings() < 2) continue;
       if (breco->GetCovMatrixStatus() != 3) continue;
-      if (breco->GetThetaRec() <120) continue;
+      if (breco->GetThetaRec() <= 100) continue;
       if (breco->GetZDist() < 200) continue;
+
+      // if (breco->GetDEDX_energy() >= 3) continue;
+      // if (bmcev->GetMuonsN() > 3) continue;
+      //if (breco->GetClassBDT() > 0.25) continue;
+      //if (breco->GetClassBDTLowE() > 0.25) continue;
       nRecoEvents++;
       //=====================================================================
       
@@ -217,47 +221,51 @@ void mcMuon(std::string _filelist,
      
       //loop over bevent pulses (fired OM's)
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
-	float pulseLY = bevt->Q(ipulse);
-	int chanID = bevt->HitChannel(ipulse);
-	Float_t pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
-	float dTime = pulseTime-refTime;
+        float pulseLY = bevt->Q(ipulse);
+        // if ( pulseLY <= 5) continue;
 
-	hly->Fill(pulseLY,eventWeight);
-	htimes->Fill(pulseTime,eventWeight);
-	hdt->Fill(dTime,eventWeight);
+        int chanID = bevt->HitChannel(ipulse);
+        Float_t pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
+        float dTime = pulseTime-refTime;
 
-	if ( maxLY < pulseLY ) maxLY = pulseLY;
-	if ( maxRecoTime < pulseTime ) maxRecoTime = pulseTime;
-	if ( minDtime > dTime ) minDtime = dTime;
-	if ( maxDtime < dTime ) maxDtime = dTime;
+        hly->Fill(pulseLY,eventWeight);
+        htimes->Fill(pulseTime,eventWeight);
+        hdt->Fill(dTime,eventWeight);
 
-	TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
-                                    bgeomtel->At(chanID)->GetY(),
-                                    bgeomtel->At(chanID)->GetZ());
-            ;
-	Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
-	Double_t ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
-	Double_t dTimeExpVsRec = dTime - ExpectedOMTime;
+        if ( maxLY < pulseLY ) maxLY = pulseLY;
+        if ( maxRecoTime < pulseTime ) maxRecoTime = pulseTime;
+        if ( minDtime > dTime ) minDtime = dTime;
+        if ( maxDtime < dTime ) maxDtime = dTime;
 
-	hdtEvsR->Fill(dTimeExpVsRec,eventWeight);
+        TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
+                                          bgeomtel->At(chanID)->GetY(),
+                                          bgeomtel->At(chanID)->GetZ());
 
-	if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR && pulseLY >= _minLY) {
-	   hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
-	}
+        Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+        Double_t ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
+        Double_t dTimeExpVsRec = dTime - ExpectedOMTime;
 
-	if ( maxDist < distToPoint_BH ) maxDist = distToPoint_BH;
-      
-	hLYvsTrackDist->Fill(distToPoint_BH,pulseLY,eventWeight);
-	if ( nMuons >= _minNM && nMuons <= _maxNM )
-	  hLYvsTrackDistNM->Fill(distToPoint_BH,pulseLY,eventWeight);
-	if ( theta >= _minPA && theta <= _maxPA )
-	  hLYvsTrackDistPA->Fill(distToPoint_BH,pulseLY,eventWeight);
-	if ( dTime >= _minTD && dTime <= _maxTD )
-	  hLYvsTrackDistTD->Fill(distToPoint_BH,pulseLY,eventWeight);
-	if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR)
-	  hLYvsTrackDistTDEvsR->Fill(distToPoint_BH,pulseLY,eventWeight);
-	if ( pulseLY >= _minLY )
-	  hLYvsTrackDistLY->Fill(distToPoint_BH,pulseLY,eventWeight);
+        // if ( dTimeExpVsRec < -20 || dTimeExpVsRec > 40) continue;
+
+        hdtEvsR->Fill(dTimeExpVsRec,eventWeight);
+
+        if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR && pulseLY >= _minLY) {
+          hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
+        }
+
+        if ( maxDist < distToPoint_BH ) maxDist = distToPoint_BH;
+            
+        hLYvsTrackDist->Fill(distToPoint_BH,pulseLY,eventWeight);
+        if ( nMuons >= _minNM && nMuons <= _maxNM )
+          hLYvsTrackDistNM->Fill(distToPoint_BH,pulseLY,eventWeight);
+        if ( theta >= _minPA && theta <= _maxPA )
+          hLYvsTrackDistPA->Fill(distToPoint_BH,pulseLY,eventWeight);
+        if ( dTime >= _minTD && dTime <= _maxTD )
+          hLYvsTrackDistTD->Fill(distToPoint_BH,pulseLY,eventWeight);
+        if ( dTimeExpVsRec >= _minTDEvsR && dTimeExpVsRec <= _maxTDEvsR)
+          hLYvsTrackDistTDEvsR->Fill(distToPoint_BH,pulseLY,eventWeight);
+        if ( pulseLY >= _minLY )
+          hLYvsTrackDistLY->Fill(distToPoint_BH,pulseLY,eventWeight);
       }
 
       for (int channel = 0; channel < bgeomtel->GetNumOMs(); channel++){
@@ -364,7 +372,6 @@ void mcMuon(std::string _filelist,
   TH1F *hTrackDistZeroOM = (TH1F*) hTrackDistTotalOM->Clone("hTrackDistZeroOM");
   hTrackDistZeroOM->SetTitle("number of zero OM vs dist from track");
   hTrackDistZeroOM->Add(hTrackDistSigOM, -1.0);
-
   snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));  
   hTrackDistTotalOM->SetTitle(stmp);
   //hTrackDistTotalOM->SetMinimum(0);
@@ -391,7 +398,6 @@ void mcMuon(std::string _filelist,
   hTrackDistSigOM->GetYaxis()->SetTitle("hits");
   hTrackDistSigOM->DrawCopy();
   cnoms->SaveAs(fout + "figures/" + "signom_vs_dist.pdf");
-
 
   if ( gROOT->GetListOfCanvases()->FindObject("c2cd") == NULL )
     c2cd = new TCanvas("c2cd","LY vs Dist", 1010, 10, 600, 400);
@@ -446,9 +452,6 @@ void mcMuon(std::string _filelist,
   hLYvsTrackDistTDEvsR->GetXaxis()->SetTitle("Distance from reco track to OM [m]");
   hLYvsTrackDistTDEvsR->GetYaxis()->SetTitle("LY [p.e.]");
   hLYvsTrackDistTDEvsR->DrawCopy("colz");
-
-
-	
 
   outputFile->cd();
   hNmuon->Write();

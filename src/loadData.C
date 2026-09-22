@@ -17,12 +17,12 @@
 
 #include "../helpers/help_functions.C"
 
-void load_data(std::string _filelist,
-		  int save_event = 1,
-		  int save_pulse = 1,
-		  int save_gentrk = 1,
-	          float _minTD = -1000, // in ns
-	          float _maxTD = 2000,
+void loadData(std::string _filelist,
+		  int _saveEvent = 1,
+		  int _savePulse = 1,
+		  int _saveGentrk = 1,
+      float _minTD = -1000, // in ns
+      float _maxTD = 2000,
 		  float _minLY = 5     // in p.e.
 )
 {
@@ -39,7 +39,7 @@ void load_data(std::string _filelist,
   Int_t  eventId, clusterID, number = 0; 
   Int_t  nRespMuons, nTrueMuons;
   Float_t eventWeight, trueTime, trueFirstMuonEnergy, trueFirstMuonTheta, trueFirstMuonPhi, truePrimaryTheta, truePrimaryPhi, truePrimaryEnergy, trueBundleEnergy;
-  Float_t RecoTheta, RecoPhi, RecoRefTime;
+  Float_t RecoTheta, RecoPhi, RecoRefTime, RecoNHits, RecoNStrings, RecoDEDX, RecoZDist;
 
   trOut_event->Branch("eventId", &eventId);
   trOut_event->Branch("number", &number);
@@ -62,6 +62,9 @@ void load_data(std::string _filelist,
   trOut_event->Branch("RecoTheta", &RecoTheta);
   trOut_event->Branch("RecoPhi", &RecoPhi);
   trOut_event->Branch("RecoRefTime", &RecoRefTime);
+  trOut_event->Branch("RecoNHits", &RecoNHits);
+  trOut_event->Branch("RecoNStrings", &RecoNStrings); 
+  trOut_event->Branch("RecoDEDX", &RecoDEDX);
 
   //----------------configuration for gen muons data file-----------------
   TFile* outputFile_gentrk = TFile::Open(fout + "/mc_gen_trk.root","recreate");
@@ -82,14 +85,14 @@ void load_data(std::string _filelist,
   TTree *trOut_pulse = new TTree("pRecoTree", "Postprocessed pulse mc reco data");
 
   Int_t  chanID;
-  Float_t pulseLY,  pulseTime, dTime, OEdTime, pulseZ, RecoDistToPoint_BH, ExpectedOMTime, trueFirstMuonDistToPoint_BH;
+  Float_t pulseLY,  pulseTime, dTime, dTimeExpVsRec, pulseZ, RecoDistToPoint_BH, ExpectedOMTime, trueFirstMuonDistToPoint_BH;
   trOut_pulse->Branch("eventId", &eventId); 
   trOut_pulse->Branch("number", &number);
   trOut_pulse->Branch("chanID", &chanID); 
   trOut_pulse->Branch("pulseLY", &pulseLY); 
   trOut_pulse->Branch("pulseTime", &pulseTime); 
   trOut_pulse->Branch("dTime", &dTime); 
-  trOut_pulse->Branch("OEdTime", &OEdTime);
+  trOut_pulse->Branch("dTimeExpVsRec", &dTimeExpVsRec);
   trOut_pulse->Branch("pulseZ", &pulseZ);
   trOut_pulse->Branch("RecoDistToPoint_BH", &RecoDistToPoint_BH); 
   trOut_pulse->Branch("ExpectedOMTime", &ExpectedOMTime);
@@ -140,11 +143,23 @@ void load_data(std::string _filelist,
       if ( eventWeight == 0 ) continue;      
       if (bmcev->GetTrack(0) == NULL) continue;
 
+      //====================selection cuts===================================
+      // if (breco->GetNHits() < 8) continue;
+      // if (breco->GetNStrings() < 2) continue;
+      // if (breco->GetCovMatrixStatus() != 3) continue;
+      // if (breco->GetThetaRec() <= 100) continue;
+      // if (breco->GetZDist() < 200) continue;
+
+      //if (breco->GetDEDX_energy() >= 3) continue;
+      //if (bmcev->GetMuonsN() > 3) continue;
+      //if (breco->GetClassBDT() > 0.25) continue;
+      //if (breco->GetClassBDTLowE() > 0.25) continue;
+      //=====================================================================
+
       //---------------- mc info ----------------------
       //number of muons, which produced response in the detector 
       nRespMuons = bmcev->GetResponseMuonsN();
       nTrueMuons = bmcev->GetMuonsN();
-      // true time of first muon
       trueTime = bmcev->GetFirstMuonTime();
 
       // true first muon properties
@@ -165,26 +180,24 @@ void load_data(std::string _filelist,
                          bmcev->GetTrack(imuon)->GetZ());
 
       for (int itrk = 0; itrk < bmcev->GetResponseMuonsN(); itrk++){
-	  trueMuonEnergy = bmcev->GetTrack(itrk)->GetMuonEnergy();
-	  trueMuonTheta = bmcev->GetTrack(itrk)->GetTheta();
-	  trueMuonPhi = bmcev->GetTrack(itrk)->GetPhi();
-	  trueMuonDelay = bmcev->GetTrack(itrk)->GetDelay(); //with respect to first one (nanosec)
+        trueMuonEnergy = bmcev->GetTrack(itrk)->GetMuonEnergy();
+        trueMuonTheta = bmcev->GetTrack(itrk)->GetTheta();
+        trueMuonPhi = bmcev->GetTrack(itrk)->GetPhi();
+        trueMuonDelay = bmcev->GetTrack(itrk)->GetDelay(); //with respect to first one (nanosec)
 
-	  Float_t trueMuonThetaRad = TMath::Pi()*(trueMuonTheta)/180;
-	  Float_t trueMuonPhiRad = TMath::Pi()*(trueMuonPhi)/180;
+        Float_t trueMuonThetaRad = TMath::Pi()*(trueMuonTheta)/180;
+        Float_t trueMuonPhiRad = TMath::Pi()*(trueMuonPhi)/180;
 
-	  TVector3 trueMuonVec(sin(trueMuonThetaRad)*cos(trueMuonPhiRad),
-		       sin(trueMuonThetaRad)*sin(trueMuonPhiRad),
-		       cos(trueMuonThetaRad));
+        TVector3 trueMuonVec(sin(trueMuonThetaRad)*cos(trueMuonPhiRad),
+              sin(trueMuonThetaRad)*sin(trueMuonPhiRad),
+              cos(trueMuonThetaRad));
 
-	  TVector3 trueMuonPoint(bmcev->GetTrack(itrk)->GetX(),
-		         bmcev->GetTrack(itrk)->GetY(),
-		         bmcev->GetTrack(itrk)->GetZ());
+        TVector3 trueMuonPoint(bmcev->GetTrack(itrk)->GetX(),
+                bmcev->GetTrack(itrk)->GetY(),
+                bmcev->GetTrack(itrk)->GetZ());
 
-
-	  trOut_gentrk->Fill();
+        trOut_gentrk->Fill();
       }
-
 
       // Primary Particle Angles
       truePrimaryTheta = bmcev->GetPrimaryParticleTheta();
@@ -194,13 +207,15 @@ void load_data(std::string _filelist,
       // response cluster number
       clusterID = extractClusterId(fname_mc);
 
-
-
       //---------------- reco info ---------------------
       //Calculate distance from reconstructed track to channels
       RecoTheta = breco->GetThetaRec(); //_clHM();
       RecoPhi = breco->GetPhiRec(); //_clHM();
       RecoRefTime = breco->GetTimeXYZRec();
+      RecoNHits = breco->GetNHits();
+      RecoNStrings = breco->GetNStrings();
+      RecoDEDX = breco->GetDEDX_energy();
+      RecoZDist = breco->GetZDist();
 
       Float_t trackThetaRad = TMath::Pi()*(RecoTheta)/180;
       Float_t trackPhiRad = TMath::Pi()*(RecoPhi)/180;
@@ -211,26 +226,25 @@ void load_data(std::string _filelist,
       //reference point at the muon track and its time:
       TVector3 refPoint = breco->GetXYZRec();
 
-  
       //loop over bevent pulses (fired OM's)
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
-	pulseLY = bevt->Q(ipulse);
-	chanID = bevt->HitChannel(ipulse);
-	pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
-	dTime = pulseTime-RecoRefTime;
+        pulseLY = bevt->Q(ipulse);
+        chanID = bevt->HitChannel(ipulse);
+        pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
+        dTime = pulseTime-RecoRefTime;
 
-	TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
-                                    bgeomtel->At(chanID)->GetY(),
-                                    bgeomtel->At(chanID)->GetZ());
-        
-	pulseZ = bgeomtel->At(chanID)->GetZ();  
-	RecoDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
-	ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
-	trueFirstMuonDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(trueFirstMuonPoint, trueFirstMuonVec, chanPos);
-	OEdTime = ExpectedOMTime - dTime;	
+        TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
+                                          bgeomtel->At(chanID)->GetY(),
+                                          bgeomtel->At(chanID)->GetZ());
+              
+        pulseZ = bgeomtel->At(chanID)->GetZ();  
+        RecoDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+        ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
+        trueFirstMuonDistToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(trueFirstMuonPoint, trueFirstMuonVec, chanPos);
+        dTimeExpVsRec = ExpectedOMTime - dTime;
 
-	if ( pulseLY < _minLY) continue;
-	if ( dTime < _minTD || dTime > _maxTD ) continue;
+        // if ( pulseLY < _minLY) continue;
+        // if ( dTime < _minTD || dTime > _maxTD ) continue;
 
         trOut_pulse->Fill();
       }
