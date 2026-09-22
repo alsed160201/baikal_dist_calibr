@@ -79,7 +79,7 @@ void mcMuon(std::string _filelist,
 
   TString fout = "./output/";
 
-  TFile* outputFile = new TFile("./output/outputFile.root","recreate");
+  TFile* outputFile = new TFile(fout + "data/outputFile.root","recreate");
 
   TH1F* hNmuon = new TH1F("hNmuon","Number of muons in event",_nmuonnbin,_nmuonmin,_nmuonmax);
   TH1F* htruetime = new TH1F("htruetime","MC time of first muon",_timenbin,_timemin,_timemax);
@@ -291,7 +291,7 @@ void mcMuon(std::string _filelist,
   hNmuon->GetXaxis()->SetTitle("Number of muons");
   hNmuon->GetYaxis()->SetTitle("entries");
   hNmuon->DrawCopy();
-  cnmuon->SaveAs(fout + "nmuons.pdf");
+  cnmuon->SaveAs(fout + "figures/" + "nmuons.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cly") == NULL )
     cly = new TCanvas("cly","LY", 10, 510, 400, 400);
@@ -302,7 +302,7 @@ void mcMuon(std::string _filelist,
   hly->GetXaxis()->SetTitle("LY in OMs [p.e.]");
   hly->GetYaxis()->SetTitle("entries");
   hly->DrawCopy();
-  cly->SaveAs(fout + "LY.pdf");
+  cly->SaveAs(fout + "figures/"+ "LY.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("ctt") == NULL )
     ctt = new TCanvas("ctt","True time", 510, 10, 400, 400);
@@ -322,7 +322,7 @@ void mcMuon(std::string _filelist,
   legctt->AddEntry(hreftime,sleg,"l");
   legctt->Draw("same");
   ctt->Update();
-  ctt->SaveAs(fout + "true_time.pdf");
+  ctt->SaveAs(fout + "figures/" + "true_time.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("ct") == NULL )
     ct = new TCanvas("ct","Time", 510, 310, 400, 400);
@@ -332,7 +332,7 @@ void mcMuon(std::string _filelist,
   htimes->GetXaxis()->SetTitle("OM time [ns]");
   htimes->GetYaxis()->SetTitle("entries");
   htimes->DrawCopy();
-  ct->SaveAs(fout+"puls_time.pdf");
+  ct->SaveAs(fout + "figures/" + "puls_time.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cdt") == NULL )
     cdt = new TCanvas("cdt","Time dif", 510, 610, 400, 400);
@@ -342,7 +342,7 @@ void mcMuon(std::string _filelist,
   hdt->GetXaxis()->SetTitle("OM time - Ref time [ns]");
   hdt->GetYaxis()->SetTitle("entries");
   hdt->DrawCopy();
-  cdt->SaveAs(fout+"rel_time.pdf");
+  cdt->SaveAs(fout + "figures/" + "rel_time.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cdtevsr") == NULL )
     cdtevsr = new TCanvas("cdtevsr","Reco vs Expected Time dif", 510, 610, 400, 400);
@@ -352,7 +352,7 @@ void mcMuon(std::string _filelist,
   hdtEvsR->GetXaxis()->SetTitle("Expected dtime - Reco dtime [ns]");
   hdtEvsR->GetYaxis()->SetTitle("entries");
   hdtEvsR->DrawCopy();
-  cdtevsr->SaveAs(fout+"evsr_dtime.pdf");
+  cdtevsr->SaveAs(fout + "figures/" +  "evsr_dtime.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cnomt") == NULL )
     cnomt = new TCanvas("cnomt","Number of total OM vs dist from track", 510, 610, 400, 400);
@@ -380,7 +380,7 @@ void mcMuon(std::string _filelist,
   legnom->AddEntry(hTrackDistZeroOM,sleg,"l");
   legnom->Draw("same");
   cnomt->Update();
-  cnomt->SaveAs(fout+"totalnom_vs_dist.pdf");
+  cnomt->SaveAs(fout + "figures/" + "totalnom_vs_dist.pdf");
 
   if ( gROOT->GetListOfCanvases()->FindObject("cnoms") == NULL )
     cnoms = new TCanvas("cnoms","Number of signal OM vs dist from track", 510, 610, 400, 400);
@@ -390,7 +390,7 @@ void mcMuon(std::string _filelist,
   hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
   hTrackDistSigOM->GetYaxis()->SetTitle("hits");
   hTrackDistSigOM->DrawCopy();
-  cnoms->SaveAs(fout+"signom_vs_dist.pdf");
+  cnoms->SaveAs(fout + "figures/" + "signom_vs_dist.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("c2cd") == NULL )

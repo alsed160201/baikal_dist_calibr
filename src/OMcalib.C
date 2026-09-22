@@ -15,7 +15,7 @@
 #include "BRecoMuon.h"
 #include "BGeomTel.h"
 
-#include "./helpers/help_functions.C"
+#include "../helpers/help_functions.C"
 
 //int NCLUSTER = 2;
 TCanvas* cnoms;    // Number of fired OM vs dist from track

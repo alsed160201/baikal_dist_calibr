@@ -15,7 +15,7 @@
 #include "BRecoMuon.h"
 #include "BGeomTel.h"
 
-#include "./helpers/help_functions.C"
+#include "../helpers/help_functions.C"
 
 void load_data(std::string _filelist,
 		  int save_event = 1,
@@ -32,7 +32,7 @@ void load_data(std::string _filelist,
   //----------------output file configuration-------------
 
   //----------------configuration for event data file-----------------
-  TString fout = "./output/";
+  TString fout = "./output/data";
   TFile* outputFile_event = TFile::Open(fout + "/mc_reco_event.root","recreate");
   TTree *trOut_event = new TTree("eRecoTree", "Postprocessed event mc reco data");
   
