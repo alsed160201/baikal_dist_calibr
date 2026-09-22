@@ -37,7 +37,7 @@ void OMdistProfile(std::string _filelist,
 
   char stmp[120];
   char sleg[120];
-  char stit[120];
+  char stit[120];д
   snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
 
   TString fout = "./output/figures/";

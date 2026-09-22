@@ -65,6 +65,7 @@ void loadData(std::string _filelist,
   trOut_event->Branch("RecoNHits", &RecoNHits);
   trOut_event->Branch("RecoNStrings", &RecoNStrings); 
   trOut_event->Branch("RecoDEDX", &RecoDEDX);
+  trOut_event->Branch("RecoZDist", &RecoZDist);
 
   //----------------configuration for gen muons data file-----------------
   TFile* outputFile_gentrk = TFile::Open(fout + "/mc_gen_trk.root","recreate");
