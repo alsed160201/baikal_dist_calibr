@@ -35,19 +35,23 @@ TGraphErrors* MakeLogGraph(TH1F *h1) {
  
     for (int i = 1; i <= h1->GetNbinsX(); ++i) {
         double content = h1->GetBinContent(i);
-        
-        if (content <= 0) continue; 
- 
+
         double x       = h1->GetBinCenter(i);
-        double error_y = h1->GetBinError(i);
-        double error_x = h1->GetBinWidth(i) / 2.0; 
- 
-        double new_y       = -std::log(content);
-        double new_error_y = error_y / content;
- 
+        double error_x = h1->GetBinWidth(i) / 2.0;
+
+        double new_y, new_error_y;
+        if (content <= 0) {
+            new_y       = 0;
+            new_error_y = 0;
+        } else {
+            double error_y = h1->GetBinError(i);
+            new_y       = -std::log(content);
+            new_error_y = error_y / content;
+        }
+
         graph->SetPoint(point_index, x, new_y);
         graph->SetPointError(point_index, error_x, new_error_y);
-        
+
         point_index++;
     }
  

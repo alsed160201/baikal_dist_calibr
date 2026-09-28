@@ -1,0 +1,269 @@
+#include <unordered_map>
+
+#include "TH1F.h"
+#include "TH2F.h"
+#include "TTree.h"
+#include "TFile.h"
+#include "TStyle.h"
+#include "TCanvas.h"
+#include "TLegend.h"
+
+#include "BMCEvent.h"
+#include "BSource.h"
+#include "BSecInteraction.h"
+#include "BEventMask.h"
+#include "BHelperFunctions.h"
+#include "BMuonNamespace.h"
+#include "BRecoMuon.h"
+#include "BGeomTel.h"
+
+#include "../helpers/help_functions.C"
+
+//int NCLUSTER = 2;
+TCanvas* cnoms;    // Number of fired OM vs dist from track
+TCanvas* cnomt;    // Number of total OM vs dist from track
+TCanvas* cphe;    // Number of ph. e.
+TCanvas* cprof;    // Number of ph. e. via signal profile
+
+void OMdistFiter(std::string _filelist,
+	    float _rmin = 2.5,
+	    float _rmax = 30,
+      float _nsteps = 10   // in m
+)
+{
+  gStyle->SetOptTitle(1);
+  gStyle->SetOptStat(0);
+
+  char stmp[120];
+  char sleg[120];
+  char stit[120];
+  snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
+
+  TString fout = "./output/figures/";
+
+  TFile* outputFile = new TFile("./output/data/OMdistProfileFile.root","recreate");
+
+  TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
+  hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
+  TH1F* hTrackDistTotalOM = new TH1F("TrackDistTotalOM ", "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
+  hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
+  TProfile* hprof  = new TProfile("hprof","Profile of ph.e. signal versus track dist", _nsteps, _rmin, _rmax);
+
+  //---------- read file
+  int ifile=0;
+  char tmp[100];
+  int nRecoEvents= 0;
+  ifstream flist_mc;
+  flist_mc.open(_filelist.data());
+  while (!flist_mc.eof()){
+    ifile++;
+    std::string fname_mc;
+    flist_mc>>fname_mc;
+    flist_mc.getline(tmp,100,'\n');
+    if (fname_mc.empty()) continue;
+    TFile fmc(fname_mc.c_str());
+
+    std::cout<<"processing "<<fname_mc<<std::endl;
+
+    bool skip=false;
+    if (fmc.GetSize()<2500000) skip=true;
+    if (skip||fmc.IsZombie()) {
+      std::cout<<"corrupted file"<<std::endl;
+      continue;
+    }
+
+    TTree* trMC=(TTree*)fmc.Get("Events");
+    if (trMC==NULL) continue;
+
+    BEvent* bevt=0;
+    trMC->SetBranchAddress("BEvent.",&bevt);
+    BGeomTel* bgeomtel=0;
+    trMC->SetBranchAddress("BGeomTel.",&bgeomtel);
+    BMCEvent* bmcev=0;
+    trMC->SetBranchAddress("BMCEvent.",&bmcev);
+    BRecoMuon* breco=0;
+    trMC->SetBranchAddress("BRecoMuon.",&breco);
+
+    std::cout<<"Events: "<<trMC->GetEntries()<<std::endl;
+
+
+    for (int i=0; i<trMC->GetEntries(); i++){
+
+      trMC->GetEntry(i);
+
+      Double_t eventWeight=bmcev->GetEventWeight();
+      if ( eventWeight == 0 ) continue;
+      if (bmcev->GetTrack(0) == NULL) continue;
+
+      //====================selection cuts===================================
+      if (breco->GetNHits() < 8) continue;
+      if (breco->GetNStrings() > 3) continue;
+      if (breco->GetCovMatrixStatus() != 3) continue;
+      if (breco->GetThetaRec() <= 160) continue;
+      if (breco->GetZDist() < 200) continue;
+
+      if (breco->GetDEDX_energy() >= 3) continue;
+      // if (bmcev->GetMuonsN() > 1) continue;
+      //if (breco->GetClassBDT() > 0.25) continue;
+      //if (breco->GetClassBDTLowE() > 0.25) continue;
+      nRecoEvents++;
+      //=====================================================================
+
+      //---- mc info ----------------------
+      //number of muons, which produced response in the detector
+      Int_t nMuons = bmcev->GetResponseMuonsN();
+
+      // true time of first muon
+      Double_t trueTime = bmcev->GetFirstMuonTime();
+
+      //---- reco info ---------------------
+      //Calculate distance from reconstructed track to channels
+      Double_t theta = breco->GetThetaRec(); //_clHM();
+      Double_t phi = breco->GetPhiRec(); //_clHM();
+      double refTime = breco->GetTimeXYZRec();
+
+      Float_t trackThetaRad = TMath::Pi()*(theta)/180;
+      Float_t trackThetaGrad = theta;
+      Float_t trackPhiRad = TMath::Pi()*(phi)/180;
+
+      TVector3 recoVec(sin(trackThetaRad)*cos(trackPhiRad),
+		       sin(trackThetaRad)*sin(trackPhiRad),
+		       cos(trackThetaRad));
+
+      //reference point at the muon track and its time:
+      TVector3 refPoint = breco->GetXYZRec();
+
+      // signal amplitude (ph.e.) per channel, for channels with a pulse that
+      // passes the time cut below; looked up in the all-OM loop further down
+      // so hprof averages over every OM (0 for OMs that didn't fire), not just
+      // the fired ones
+      std::unordered_map<int, float> chanSignal;
+
+      //loop over bevent pulses (fired OM's)
+      for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
+
+        float pulseLY = bevt->Q(ipulse);
+        //  if ( pulseLY <= 5) continue;
+
+        int chanID = bevt->HitChannel(ipulse);
+        Float_t pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
+        float dTime = pulseTime-refTime;
+        TVector3 chanPos = TVector3(bgeomtel->At(chanID)->GetX(),
+                                          bgeomtel->At(chanID)->GetY(),
+                                          bgeomtel->At(chanID)->GetZ());
+        Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+        Double_t ExpectedOMTime = BHelperFunctions::GetPropagationTime(refPoint, recoVec, chanPos);
+        Double_t OMlightAngle = 180*BHelperFunctions::GetOMlightAngle(refPoint, recoVec, chanPos)/TMath::Pi();
+        Double_t dTimeExpVsRec = dTime - ExpectedOMTime;
+
+        if ( dTimeExpVsRec < -5 || dTimeExpVsRec > 10) continue;
+
+        hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
+        chanSignal[chanID] = pulseLY;
+      }
+
+      for (int channel = 0; channel < bgeomtel->GetNumOMs(); channel++){
+
+        TVector3 chanPos = TVector3(bgeomtel->At(channel)->GetX(),
+		                    bgeomtel->At(channel)->GetY(),
+		                    bgeomtel->At(channel)->GetZ());
+        Double_t distToPoint_BH = BHelperFunctions::GetTrackDistanceToPoint(refPoint, recoVec, chanPos);
+        hTrackDistTotalOM->Fill(distToPoint_BH,eventWeight);
+
+        // 0 ph.e. for OMs that didn't fire (or whose pulse failed the time cut above),
+        // so hprof averages over every OM at this distance, not only the fired ones
+        auto chanSignalIt = chanSignal.find(channel);
+        float channelSignal = (chanSignalIt != chanSignal.end()) ? chanSignalIt->second : 0.0f;
+        hprof->Fill(distToPoint_BH, channelSignal, eventWeight);
+      }
+
+    }
+  }
+
+  //-------------OM hist magic------------------------
+  hTrackDistSigOM->Scale(1.0/nRecoEvents);
+  hTrackDistTotalOM->Scale(1.0/nRecoEvents);
+
+  TH1F *hTrackDistZeroOM = (TH1F*) hTrackDistTotalOM->Clone("hTrackDistZeroOM");
+  hTrackDistZeroOM->SetTitle("number of zero OM vs dist from track");
+  hTrackDistZeroOM->Add(hTrackDistSigOM, -1.0);
+
+  TH1F *hTrackDistZeroOMfrac = (TH1F*) hTrackDistZeroOM->Clone("hTrackDistZeroOMfrac");
+  hTrackDistZeroOMfrac->SetTitle("fraction of zero OM vs dist from track");
+  hTrackDistZeroOMfrac->Divide(hTrackDistTotalOM);
+
+  TGraphErrors *pheGraph = MakeLogGraph(hTrackDistZeroOMfrac);
+
+  //------------- plot to canvas----------------------
+  if ( gROOT->GetListOfCanvases()->FindObject("cnomt") == NULL )
+    cnomt = new TCanvas("cnomt","Number of total OM vs dist from track", 510, 610, 400, 400);
+  cnomt->cd();
+  TLegend* legnom = new TLegend(0.2,0.7,0.55,0.85);
+  legnom->SetTextSize(0.045);
+
+  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));
+  hTrackDistTotalOM->SetTitle(stmp);
+  hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
+  hTrackDistTotalOM->GetYaxis()->SetTitle("hits");
+  hTrackDistTotalOM->DrawCopy();
+  snprintf(sleg, sizeof sleg,"total OM");
+  legnom->AddEntry(hTrackDistTotalOM,sleg,"l");
+  hTrackDistZeroOM->SetLineColor(2);
+  hTrackDistZeroOM->SetMarkerColor(2);
+  hTrackDistZeroOM->DrawCopy("same");
+  snprintf(sleg, sizeof sleg,"zero OM");
+  legnom->AddEntry(hTrackDistZeroOM,sleg,"l");
+  legnom->Draw("same");
+  cnomt->Update();
+  cnomt->SaveAs(fout+"totalnom_vs_dist.pdf");
+
+
+  if ( gROOT->GetListOfCanvases()->FindObject("cnoms") == NULL )
+    cnoms = new TCanvas("cnoms","Number of signal OM vs dist from track", 510, 610, 400, 400);
+  cnoms->cd();
+  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));
+  hTrackDistSigOM->SetTitle(stmp);
+  hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
+  hTrackDistSigOM->GetYaxis()->SetTitle("hits");
+  hTrackDistSigOM->DrawCopy();
+  cnoms->SaveAs(fout+"signom_vs_dist.pdf");
+
+
+  //------------- fit and save ----------------------
+  Double_t WR = BHelperFunctions::GetWRefraction();
+  Double_t cos_c = 1/WR;
+  Double_t sin_c = sqrt(1 - cos_c*cos_c);
+
+  if ( gROOT->GetListOfCanvases()->FindObject("cphe") == NULL )
+    cphe = new TCanvas("cphe","ph. e. estimation", 510, 610, 400, 400);
+  cphe->cd();
+  // cphe->SetLogy(1);
+  pheGraph->Draw("AP");
+  TF1 *fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2]))", _rmin, _rmax);
+  fitfunction->SetParNames("A", "Lambda", "sin_c");
+  fitfunction->SetParameters(8, 20);
+  fitfunction->FixParameter(2, sin_c);
+  pheGraph->Fit("fitfunction");
+  cphe->SaveAs(fout+"phe_estimation.pdf");
+
+
+  if ( gROOT->GetListOfCanvases()->FindObject("cprof") == NULL )
+    cprof = new TCanvas("cprof","ph. e. estimation (via signal profile)", 510, 610, 400, 400);
+  cprof->cd();
+  // cprof->SetLogy(1);
+  hprof->Draw("PE");
+  fitfunction->SetParameters(8, 20);
+  fitfunction->FixParameter(2, sin_c);
+  hprof->Fit("fitfunction");
+  cprof->SaveAs(fout+"phe_profile_estimation.pdf");
+
+  //------------write into file------------------
+  outputFile->cd();
+  hTrackDistTotalOM->Write();
+  hTrackDistSigOM->Write();
+  hTrackDistZeroOM->Write();
+  hTrackDistZeroOMfrac->Write();
+  pheGraph->Write();
+  hprof->Write();
+  outputFile->Close();
+}
