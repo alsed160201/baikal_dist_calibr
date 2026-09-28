@@ -1,7 +1,9 @@
 #include <cmath>
+
 #include "TH1F.h"
 #include "TGraphErrors.h"
 #include "TString.h"
+#include "TSystem.h"
 
 int extractClusterId(const std::string& filepath){
 	
@@ -56,6 +58,27 @@ TGraphErrors* MakeLogGraph(TH1F *h1) {
     }
  
     return graph;
+}
+
+
+bool EnsureDirectoryExists(const TString& dir_path) {
+    // .Data() extracts const char* from TString
+    if (gSystem->AccessPathName(dir_path.Data())) {
+        std::cout << "[ROOT] Directory '" << dir_path << "' not found. Creating..." << std::endl;
+        
+        int status = gSystem->MakeDirectory(dir_path.Data());
+        
+        if (status == 0) {
+            std::cout << "[ROOT] Directory successfully created." << std::endl;
+            return true;
+        } else {
+            std::cerr << "[ERROR] Failed to create directory: " << dir_path << std::endl;
+            return false;
+        }
+    }
+    
+    std::cout << "[ROOT] Directory '" << dir_path << "' already exists." << std::endl;
+    return true;
 }
 
 

@@ -1,4 +1,8 @@
 #include <unordered_map>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
 
 #include "TH1F.h"
 #include "TH2F.h"
@@ -7,6 +11,11 @@
 #include "TStyle.h"
 #include "TCanvas.h"
 #include "TLegend.h"
+#include "TProfile.h" 
+#include "TF1.h"  
+#include "TROOT.h"
+#include "TVector3.h"
+#include "TMath.h"
 
 #include "BMCEvent.h"
 #include "BSource.h"
@@ -45,9 +54,18 @@ void OMdistProfile(std::string _filelist,
   char stit[120];
   snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
 
-  TString fout = "./output/figures/";
+  TString figures_out = "./output/figures/profile/";
+  TString data_out = "./output/data/";
 
-  TFile* outputFile = new TFile("./output/data/OMdistProfileFile.root","recreate");
+  if (!EnsureDirectoryExists(figures_out)) {
+        return; // Exits macro and stops the program
+    }
+
+  if (!EnsureDirectoryExists(data_out)) {
+      return; // Exits macro and stops the program
+  }
+
+  TFile* outputFile = new TFile(data_out + "OMdistProfileFile.root","recreate");
 
   TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
   hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
@@ -144,18 +162,22 @@ void OMdistProfile(std::string _filelist,
 
   // variable to split hits by
 //========================= example 1: split hits by the pulse amplitude =========================
-  // TString hitGroupVarName = "Q_{cut}, p.e.";
-  // std::vector<Double_t> hitGroupEdges = {0, 3, 5, 7, 10};
-  // auto GetHitGroupingVariable = [](const HitRefs& hit) -> Double_t {
-  //   return hit.bevt->Q(hit.ipulse);
-  // };
+  TString hitGroupVarName = "Q_{cut}, p.e.";
+  _hitGroupCumulative = true;
+  _hitGroupFilterTotal = false;
+  std::vector<Double_t> hitGroupEdges = {0, 3, 5, 7, 10};
+  auto GetHitGroupingVariable = [](const HitRefs& hit) -> Double_t {
+    return hit.bevt->Q(hit.ipulse);
+  };
 
 //========================= example 2: split hits by the OM light incidence angle ==================================
-  TString hitGroupVarName = "#theta_{#gamma}, deg";
-  std::vector<Double_t> hitGroupEdges = {0, 20, 40, 60, 90, 180};
-  auto GetHitGroupingVariable = [](const HitRefs& hit) -> Double_t {
-    return 180*BHelperFunctions::GetOMlightAngle(hit.refPoint, hit.recoVec, hit.chanPos)/TMath::Pi();
-  };
+  // TString hitGroupVarName = "#theta_{#gamma}, deg";
+  // _hitGroupCumulative = false
+  // _hitGroupFilterTotal = true
+  // std::vector<Double_t> hitGroupEdges = {0, 20, 40, 60, 90, 180};
+  // auto GetHitGroupingVariable = [](const HitRefs& hit) -> Double_t {
+  //   return 180*BHelperFunctions::GetOMlightAngle(hit.refPoint, hit.recoVec, hit.chanPos)/TMath::Pi();
+  // };
 
   const int nHitGroups = (int)hitGroupEdges.size() - 1;
   std::vector<Int_t> hitGroupColors = {kBlack, kRed, kBlue, kGreen+2, kMagenta+1, kOrange+7, kCyan+2};
@@ -238,13 +260,13 @@ void OMdistProfile(std::string _filelist,
 
       //====================selection cuts===================================
       if (breco->GetNHits() < 8) continue;
-      if (breco->GetNStrings() > 3) continue;
+      // if (breco->GetNStrings() > 3) continue;
       if (breco->GetCovMatrixStatus() != 3) continue;
       if (breco->GetThetaRec() <= 100) continue;
       if (breco->GetZDist() < 200) continue;
 
-      if (breco->GetDEDX_energy() >= 3) continue;
-      if (bmcev->GetMuonsN() > 1) continue;
+      // if (breco->GetDEDX_energy() >= 3) continue;
+      // if (bmcev->GetMuonsN() > 1) continue;
       //if (breco->GetClassBDT() > 0.25) continue;
       //if (breco->GetClassBDTLowE() > 0.25) continue;
       nRecoEvents++;
@@ -287,7 +309,7 @@ void OMdistProfile(std::string _filelist,
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
 
         float pulseLY = bevt->Q(ipulse);
-         if ( pulseLY <= 3) continue;
+        //  if ( pulseLY <= 3) continue;
 
         int chanID = bevt->HitChannel(ipulse);
         Float_t pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
@@ -451,7 +473,7 @@ void OMdistProfile(std::string _filelist,
   legnom->AddEntry(hTrackDistZeroOM,sleg,"l");
   legnom->Draw("same");
   cnomt->Update();
-  cnomt->SaveAs(fout+"totalnom_vs_dist.pdf");
+  cnomt->SaveAs(figures_out+"totalnom_vs_dist.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("cnoms") == NULL )
@@ -462,7 +484,7 @@ void OMdistProfile(std::string _filelist,
   hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
   hTrackDistSigOM->GetYaxis()->SetTitle("hits");
   hTrackDistSigOM->DrawCopy();
-  cnoms->SaveAs(fout+"signom_vs_dist.pdf");
+  cnoms->SaveAs(figures_out+"signom_vs_dist.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("cphe") == NULL )
@@ -478,7 +500,7 @@ void OMdistProfile(std::string _filelist,
   fitfunction->SetParameters(8, 20);
   fitfunction->FixParameter(2, sin_c);
   pheGraph->Fit("fitfunction");
-  cphe->SaveAs(fout+"phe_estimation.pdf");
+  cphe->SaveAs(figures_out+"phe_estimation.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("cprof") == NULL )
@@ -489,7 +511,7 @@ void OMdistProfile(std::string _filelist,
   fitfunction->SetParameters(8, 20);  
   fitfunction->FixParameter(2, sin_c);
   hprof->Fit("fitfunction");
-  cprof->SaveAs(fout+"phe_profile_estimation.pdf");
+  cprof->SaveAs(figures_out+"phe_profile_estimation.pdf");
 
   
   if (_doGroupPlots){
@@ -514,7 +536,7 @@ void OMdistProfile(std::string _filelist,
       pheGraph_g[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
     legphe->Draw("same");
     cpheGroups->Update();
-    cpheGroups->SaveAs(fout+"phe_estimation_groups.pdf");
+    cpheGroups->SaveAs(figures_out+"phe_estimation_groups.pdf");
   }
 
 
@@ -537,7 +559,7 @@ void OMdistProfile(std::string _filelist,
       pheGraph_h[0]->GetHistogram()->SetTitle(";OM dist, m;ph. e.");
     legpheHit->Draw("same");
     cpheHitGroups->Update();
-    cpheHitGroups->SaveAs(fout+"phe_estimation_hit_groups.pdf");
+    cpheHitGroups->SaveAs(figures_out+"phe_estimation_hit_groups.pdf");
   }
 
 

@@ -1,10 +1,21 @@
+#include <unordered_map>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+
 #include "TH1F.h"
 #include "TH2F.h"
 #include "TTree.h"
-#include "TFile.h" 
-#include "TStyle.h" 
+#include "TFile.h"
+#include "TStyle.h"
 #include "TCanvas.h"
 #include "TLegend.h"
+#include "TProfile.h" 
+#include "TF1.h"  
+#include "TROOT.h"
+#include "TVector3.h"
+#include "TMath.h"
 
 #include "BMCEvent.h"
 #include "BSource.h"
@@ -31,9 +42,14 @@ void loadData(std::string _filelist,
 
   //----------------output file configuration-------------
 
+  TString data_out = "./output/data/";
+
+  if (!EnsureDirectoryExists(data_out)) {
+    return; // Exits macro and stops the program
+  }
+
   //----------------configuration for event data file-----------------
-  TString fout = "./output/data";
-  TFile* outputFile_event = TFile::Open(fout + "/mc_reco_event.root","recreate");
+  TFile* outputFile_event = TFile::Open(data_out + "/mc_reco_event.root","recreate");
   TTree *trOut_event = new TTree("eRecoTree", "Postprocessed event mc reco data");
   
   Int_t  eventId, clusterID, number = 0; 
@@ -68,7 +84,7 @@ void loadData(std::string _filelist,
   trOut_event->Branch("RecoZDist", &RecoZDist);
 
   //----------------configuration for gen muons data file-----------------
-  TFile* outputFile_gentrk = TFile::Open(fout + "/mc_gen_trk.root","recreate");
+  TFile* outputFile_gentrk = TFile::Open(data_out + "/mc_gen_trk.root","recreate");
   TTree *trOut_gentrk = new TTree("tGenTree", "Postprocessed track mc gen data");
 
   Float_t trueMuonTheta, trueMuonPhi, trueMuonEnergy, trueMuonDelay;
@@ -82,7 +98,7 @@ void loadData(std::string _filelist,
 
   //----------------configuration for pulse data file-----------------
 
-  TFile* outputFile_pulse = TFile::Open(fout + "/mc_reco_pulse.root","recreate");
+  TFile* outputFile_pulse = TFile::Open(data_out + "/mc_reco_pulse.root","recreate");
   TTree *trOut_pulse = new TTree("pRecoTree", "Postprocessed pulse mc reco data");
 
   Int_t  chanID;

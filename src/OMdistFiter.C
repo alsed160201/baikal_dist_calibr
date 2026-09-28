@@ -1,4 +1,8 @@
 #include <unordered_map>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
 
 #include "TH1F.h"
 #include "TH2F.h"
@@ -7,6 +11,11 @@
 #include "TStyle.h"
 #include "TCanvas.h"
 #include "TLegend.h"
+#include "TProfile.h" 
+#include "TF1.h"  
+#include "TROOT.h"
+#include "TVector3.h"
+#include "TMath.h"
 
 #include "BMCEvent.h"
 #include "BSource.h"
@@ -20,8 +29,6 @@
 #include "../helpers/help_functions.C"
 
 //int NCLUSTER = 2;
-TCanvas* cnoms;    // Number of fired OM vs dist from track
-TCanvas* cnomt;    // Number of total OM vs dist from track
 TCanvas* cphe;    // Number of ph. e.
 TCanvas* cprof;    // Number of ph. e. via signal profile
 
@@ -39,9 +46,18 @@ void OMdistFiter(std::string _filelist,
   char stit[120];
   snprintf(stit,sizeof stit,"2020 MC atmospheric muons");
 
-  TString fout = "./output/figures/";
+  TString figures_out = "./output/figures/fits/";
+  TString data_out = "./output/data/";
 
-  TFile* outputFile = new TFile("./output/data/OMdistProfileFile.root","recreate");
+  if (!EnsureDirectoryExists(figures_out)) {
+        return; // Exits macro and stops the program
+    }
+
+  if (!EnsureDirectoryExists(data_out)) {
+      return; // Exits macro and stops the program
+  }
+
+  TFile* outputFile = new TFile(data_out + "OMdistProfileFile.root","recreate");
 
   TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
   hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
@@ -49,7 +65,17 @@ void OMdistFiter(std::string _filelist,
   hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
   TProfile* hprof  = new TProfile("hprof","Profile of ph.e. signal versus track dist", _nsteps, _rmin, _rmax);
 
-  //---------- read file
+
+  //====================================Fit function definition===================================
+  TF1 *fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2]))", _rmin, _rmax);
+  fitfunction->SetParNames("A", "Lambda", "sin_c");
+  Double_t WR = BHelperFunctions::GetWRefraction();
+  Double_t cos_c = 1/WR;
+  Double_t sin_c = sqrt(1 - cos_c*cos_c);
+  //==============================================================================================
+
+
+  //---------- read file---------------
   int ifile=0;
   char tmp[100];
   int nRecoEvents= 0;
@@ -97,12 +123,12 @@ void OMdistFiter(std::string _filelist,
 
       //====================selection cuts===================================
       if (breco->GetNHits() < 8) continue;
-      if (breco->GetNStrings() > 3) continue;
+      // if (breco->GetNStrings() > 3) continue;
       if (breco->GetCovMatrixStatus() != 3) continue;
-      if (breco->GetThetaRec() <= 160) continue;
+      if (breco->GetThetaRec() <= 100) continue;
       if (breco->GetZDist() < 200) continue;
 
-      if (breco->GetDEDX_energy() >= 3) continue;
+      // if (breco->GetDEDX_energy() >= 3) continue;
       // if (bmcev->GetMuonsN() > 1) continue;
       //if (breco->GetClassBDT() > 0.25) continue;
       //if (breco->GetClassBDTLowE() > 0.25) continue;
@@ -143,7 +169,7 @@ void OMdistFiter(std::string _filelist,
       for (int ipulse = 0; ipulse < bevt->NHits(); ipulse++){
 
         float pulseLY = bevt->Q(ipulse);
-        //  if ( pulseLY <= 5) continue;
+        //  if ( pulseLY <= 3) continue;
 
         int chanID = bevt->HitChannel(ipulse);
         Float_t pulseTime = bevt->GetImpulse(ipulse)->GetTime();         //ns
@@ -156,7 +182,7 @@ void OMdistFiter(std::string _filelist,
         Double_t OMlightAngle = 180*BHelperFunctions::GetOMlightAngle(refPoint, recoVec, chanPos)/TMath::Pi();
         Double_t dTimeExpVsRec = dTime - ExpectedOMTime;
 
-        if ( dTimeExpVsRec < -5 || dTimeExpVsRec > 10) continue;
+        if ( dTimeExpVsRec < -20 || dTimeExpVsRec > 40) continue;
 
         hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
         chanSignal[chanID] = pulseLY;
@@ -194,57 +220,18 @@ void OMdistFiter(std::string _filelist,
 
   TGraphErrors *pheGraph = MakeLogGraph(hTrackDistZeroOMfrac);
 
-  //------------- plot to canvas----------------------
-  if ( gROOT->GetListOfCanvases()->FindObject("cnomt") == NULL )
-    cnomt = new TCanvas("cnomt","Number of total OM vs dist from track", 510, 610, 400, 400);
-  cnomt->cd();
-  TLegend* legnom = new TLegend(0.2,0.7,0.55,0.85);
-  legnom->SetTextSize(0.045);
-
-  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));
-  hTrackDistTotalOM->SetTitle(stmp);
-  hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
-  hTrackDistTotalOM->GetYaxis()->SetTitle("hits");
-  hTrackDistTotalOM->DrawCopy();
-  snprintf(sleg, sizeof sleg,"total OM");
-  legnom->AddEntry(hTrackDistTotalOM,sleg,"l");
-  hTrackDistZeroOM->SetLineColor(2);
-  hTrackDistZeroOM->SetMarkerColor(2);
-  hTrackDistZeroOM->DrawCopy("same");
-  snprintf(sleg, sizeof sleg,"zero OM");
-  legnom->AddEntry(hTrackDistZeroOM,sleg,"l");
-  legnom->Draw("same");
-  cnomt->Update();
-  cnomt->SaveAs(fout+"totalnom_vs_dist.pdf");
-
-
-  if ( gROOT->GetListOfCanvases()->FindObject("cnoms") == NULL )
-    cnoms = new TCanvas("cnoms","Number of signal OM vs dist from track", 510, 610, 400, 400);
-  cnoms->cd();
-  snprintf(stmp,sizeof stmp,"%s, N = %d",stit,int(hTrackDistSigOM->GetEntries()));
-  hTrackDistSigOM->SetTitle(stmp);
-  hTrackDistSigOM->GetXaxis()->SetTitle("OM dist, m");
-  hTrackDistSigOM->GetYaxis()->SetTitle("hits");
-  hTrackDistSigOM->DrawCopy();
-  cnoms->SaveAs(fout+"signom_vs_dist.pdf");
-
 
   //------------- fit and save ----------------------
-  Double_t WR = BHelperFunctions::GetWRefraction();
-  Double_t cos_c = 1/WR;
-  Double_t sin_c = sqrt(1 - cos_c*cos_c);
 
   if ( gROOT->GetListOfCanvases()->FindObject("cphe") == NULL )
     cphe = new TCanvas("cphe","ph. e. estimation", 510, 610, 400, 400);
   cphe->cd();
   // cphe->SetLogy(1);
   pheGraph->Draw("AP");
-  TF1 *fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2]))", _rmin, _rmax);
-  fitfunction->SetParNames("A", "Lambda", "sin_c");
   fitfunction->SetParameters(8, 20);
   fitfunction->FixParameter(2, sin_c);
   pheGraph->Fit("fitfunction");
-  cphe->SaveAs(fout+"phe_estimation.pdf");
+  cphe->SaveAs(figures_out+"fit_estimation.pdf");
 
 
   if ( gROOT->GetListOfCanvases()->FindObject("cprof") == NULL )
@@ -255,7 +242,7 @@ void OMdistFiter(std::string _filelist,
   fitfunction->SetParameters(8, 20);
   fitfunction->FixParameter(2, sin_c);
   hprof->Fit("fitfunction");
-  cprof->SaveAs(fout+"phe_profile_estimation.pdf");
+  cprof->SaveAs(figures_out+"fit_profile_estimation.pdf");
 
   //------------write into file------------------
   outputFile->cd();
