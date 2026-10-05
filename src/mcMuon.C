@@ -114,7 +114,7 @@ void mcMuon(std::string _filelist,
   TH1F* hTrackDistSigOM = new TH1F("TrackDistSigOM ", "number of fired OM vs dist from track", _nsteps, _rmin, _rmax);
   TH1F* hTrackDistTotalOM = new TH1F("TrackDistTotalOM ", "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
 
-  TH2F* hLYvsTrackDist = new TH2F("hLYvsTrackDist","LY vs dist to OM",
+  TH2F* hLYvsTrackDist = new TH2F("hLYvsTrackDist","LY vs dlist to OM",
 				  _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
   TH2F* hLYvsTrackDistNM = new TH2F("hLYvsTrackDistNM","LY vs dist to OM, cut on Nmuon",
 				     _distnbin,_distmin,_distmax,_lynbin,_lymin,_lymax);
@@ -202,7 +202,7 @@ void mcMuon(std::string _filelist,
       if (breco->GetThetaRec() <= 100) continue;
       if (breco->GetZDist() < 200) continue;
 
-      // if (breco->GetDEDX_energy() >= 3) continue;
+      if (breco->GetDEDX_energy() >= 3) continue;
       // if (bmcev->GetMuonsN() > 3) continue;
       //if (breco->GetClassBDT() > 0.25) continue;
       //if (breco->GetClassBDTLowE() > 0.25) continue;

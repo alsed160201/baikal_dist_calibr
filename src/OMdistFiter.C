@@ -18,13 +18,10 @@
 #include "TMath.h"
 
 #include "BMCEvent.h"
-#include "BSource.h"
-#include "BSecInteraction.h"
-#include "BEventMask.h"
-#include "BHelperFunctions.h"
-#include "BMuonNamespace.h"
+#include "BEvent.h"
 #include "BRecoMuon.h"
 #include "BGeomTel.h"
+#include "BHelperFunctions.h"
 
 #include "../helpers/help_functions.C"
 
@@ -33,9 +30,10 @@ TCanvas* cphe;    // Number of ph. e.
 TCanvas* cprof;    // Number of ph. e. via signal profile
 
 void OMdistFiter(std::string _filelist,
-	    float _rmin = 2.5,
+	    float _rmin = 5,
 	    float _rmax = 30,
-      float _nsteps = 10   // in m
+      float _nsteps = 10,   // in m
+      int _fit_scenario = 2
 )
 {
   gStyle->SetOptTitle(1);
@@ -64,14 +62,60 @@ void OMdistFiter(std::string _filelist,
   TH1F* hTrackDistTotalOM = new TH1F("TrackDistTotalOM ", "number of total OM vs dist from track", _nsteps, _rmin, _rmax);
   hTrackDistTotalOM->GetXaxis()->SetTitle("OM dist, m");
   TProfile* hprof  = new TProfile("hprof","Profile of ph.e. signal versus track dist", _nsteps, _rmin, _rmax);
-
+  hprof->GetXaxis()->SetTitle("OM dist, m");
 
   //====================================Fit function definition===================================
-  TF1 *fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2]))", _rmin, _rmax);
-  fitfunction->SetParNames("A", "Lambda", "sin_c");
+
   Double_t WR = BHelperFunctions::GetWRefraction();
   Double_t cos_c = 1/WR;
   Double_t sin_c = sqrt(1 - cos_c*cos_c);
+
+  // declared outside the branches so it stays visible for the fits below;
+  // each scenario sets up its own formula, parameter names, start values and fixed parameters
+  TF1 *fitfunction = nullptr;
+  if (_fit_scenario == 1){
+    fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2]))", _rmin, _rmax);
+    fitfunction->SetParNames("A", "Lambda", "sin_c");
+    fitfunction->SetParameters(8, 20);
+    fitfunction->FixParameter(2, sin_c);
+    fitfunction->SetParLimits(1, 0.1, 200);   // absorption length must stay positive
+  }
+  else if (_fit_scenario == 2){
+    fitfunction = new TF1("fitfunction", "([0])*exp(-x/([1]*[2]))", _rmin, _rmax);
+    fitfunction->SetParNames("A", "Lambda", "sin_c");
+    fitfunction->SetParameters(8, 20);
+    fitfunction->FixParameter(2, sin_c);
+    fitfunction->SetParLimits(1, 0.1, 200);   // absorption length must stay positive
+  }
+  else if (_fit_scenario == 3){
+    // scenario 1 plus a constant pedestal B (e.g. noise hits at large distances)
+    fitfunction = new TF1("fitfunction", "([0]/x)*exp(-x/([1]*[2])) + [3]", _rmin, _rmax);
+    fitfunction->SetParNames("A", "Lambda", "sin_c", "B");
+    fitfunction->SetParameters(8, 20, 0, 0.01);
+    fitfunction->FixParameter(2, sin_c);
+    fitfunction->SetParLimits(1, 0.1, 200);   // absorption length must stay positive
+    fitfunction->SetParLimits(3, 0, 1);   // pedestal can't be negative
+  }
+  else if (_fit_scenario == 4){
+    // scenario 2 plus a constant pedestal B (e.g. noise hits at large distances)
+    fitfunction = new TF1("fitfunction", "[0]*exp(-x/([1]*[2])) + [3]", _rmin, _rmax);
+    fitfunction->SetParNames("A", "Lambda", "sin_c", "B");
+    fitfunction->SetParameters(8, 20, 0, 0.01);
+    fitfunction->FixParameter(2, sin_c);
+    fitfunction->SetParLimits(1, 0.1, 200);   // absorption length must stay positive
+    fitfunction->SetParLimits(3, 0, 1);   // pedestal can't be negative
+  }
+
+  else{
+    std::cout << "[ROOT] Fit function is not defined" << std::endl;
+    return; // Exits macro and stops the program
+  }
+
+  // start values, to reset the function before each fit
+  std::vector<Double_t> initPars(fitfunction->GetParameters(),
+                                 fitfunction->GetParameters() + fitfunction->GetNpar());
+
+
   //==============================================================================================
 
 
@@ -122,14 +166,14 @@ void OMdistFiter(std::string _filelist,
       if (bmcev->GetTrack(0) == NULL) continue;
 
       //====================selection cuts===================================
-      if (breco->GetNHits() < 8) continue;
-      // if (breco->GetNStrings() > 3) continue;
+      if (breco->GetNHits() > 10) continue;
+      if (breco->GetNStrings() > 2) continue;
       if (breco->GetCovMatrixStatus() != 3) continue;
-      if (breco->GetThetaRec() <= 100) continue;
-      if (breco->GetZDist() < 200) continue;
+      if (breco->GetThetaRec() <= 160) continue;
+      if (breco->GetZDist() < 400) continue;
 
-      // if (breco->GetDEDX_energy() >= 3) continue;
-      // if (bmcev->GetMuonsN() > 1) continue;
+      if (breco->GetDEDX_energy() >= 3) continue;
+      // if (bmcev->GetMuonsN() != 1) continue;
       //if (breco->GetClassBDT() > 0.25) continue;
       //if (breco->GetClassBDTLowE() > 0.25) continue;
       nRecoEvents++;
@@ -184,8 +228,15 @@ void OMdistFiter(std::string _filelist,
 
         if ( dTimeExpVsRec < -20 || dTimeExpVsRec > 40) continue;
 
-        hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
-        chanSignal[chanID] = pulseLY;
+
+        if (chanSignal.find(chanID) == chanSignal.end()){
+          hTrackDistSigOM->Fill(distToPoint_BH,eventWeight);
+          chanSignal[chanID] = pulseLY;
+        }
+        else{
+          chanSignal[chanID] += pulseLY;
+        }
+        
       }
 
       for (int channel = 0; channel < bgeomtel->GetNumOMs(); channel++){
@@ -213,10 +264,13 @@ void OMdistFiter(std::string _filelist,
   TH1F *hTrackDistZeroOM = (TH1F*) hTrackDistTotalOM->Clone("hTrackDistZeroOM");
   hTrackDistZeroOM->SetTitle("number of zero OM vs dist from track");
   hTrackDistZeroOM->Add(hTrackDistSigOM, -1.0);
+  SetPoissonErrors(hTrackDistZeroOM, nRecoEvents);
 
-  TH1F *hTrackDistZeroOMfrac = (TH1F*) hTrackDistZeroOM->Clone("hTrackDistZeroOMfrac");
-  hTrackDistZeroOMfrac->SetTitle("fraction of zero OM vs dist from track");
-  hTrackDistZeroOMfrac->Divide(hTrackDistTotalOM);
+  // old variant: Zero/Total without "B" (treats them as independent, overestimates the errors)
+  // TH1F *hTrackDistZeroOMfrac = (TH1F*) hTrackDistZeroOM->Clone("hTrackDistZeroOMfrac");
+  // hTrackDistZeroOMfrac->SetTitle("fraction of zero OM vs dist from track");
+  // hTrackDistZeroOMfrac->Divide(hTrackDistTotalOM);
+  TH1F *hTrackDistZeroOMfrac = MakeZeroFraction(hTrackDistSigOM, hTrackDistTotalOM, "hTrackDistZeroOMfrac");
 
   TGraphErrors *pheGraph = MakeLogGraph(hTrackDistZeroOMfrac);
 
@@ -228,9 +282,9 @@ void OMdistFiter(std::string _filelist,
   cphe->cd();
   // cphe->SetLogy(1);
   pheGraph->Draw("AP");
-  fitfunction->SetParameters(8, 20);
-  fitfunction->FixParameter(2, sin_c);
-  pheGraph->Fit("fitfunction");
+  fitfunction->SetParameters(initPars.data());
+  pheGraph->Fit(fitfunction);
+  // pheGraph->Fit(fitfunction, "EX0");
   cphe->SaveAs(figures_out+"fit_estimation.pdf");
 
 
@@ -239,9 +293,8 @@ void OMdistFiter(std::string _filelist,
   cprof->cd();
   // cprof->SetLogy(1);
   hprof->Draw("PE");
-  fitfunction->SetParameters(8, 20);
-  fitfunction->FixParameter(2, sin_c);
-  hprof->Fit("fitfunction");
+  fitfunction->SetParameters(initPars.data());
+  hprof->Fit(fitfunction);
   cprof->SaveAs(figures_out+"fit_profile_estimation.pdf");
 
   //------------write into file------------------
